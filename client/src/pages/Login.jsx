@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Tooltip from '../components/Tooltip/Tooltip';
 import { GraduationCap, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import './Login.css';
+import './Login.scss';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -113,10 +113,6 @@ const Login = () => {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </Tooltip>
-            </div>
-
-            <div className="form-footer">
-              <Link to="/forgot-password">Forgot Password?</Link>
             </div>
 
             <button type="submit" className="signin-btn" disabled={isLoading}>

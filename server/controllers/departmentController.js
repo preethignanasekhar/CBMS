@@ -387,7 +387,7 @@ const getDepartmentDetail = async (req, res) => {
       .populate('budgetHead', 'name category code')
       .populate('submittedBy', 'name email')
       .populate('approvalSteps.approver', 'name email role')
-      .sort({ billDate: -1 });
+      .sort({ createdAt: -1 });
 
     // Calculate statistics
     const totalAllocated = allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0);

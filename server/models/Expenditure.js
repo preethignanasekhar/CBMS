@@ -1,5 +1,47 @@
 const mongoose = require('mongoose');
 
+const expenseItemSchema = new mongoose.Schema({
+  category: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  billNumber: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  billDate: {
+    type: Date,
+    required: true
+  },
+  vendorName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: [0, 'Amount cannot be negative']
+  },
+  attachments: [{
+    filename: String,
+    originalName: String,
+    mimetype: String,
+    size: Number,
+    url: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  description: {
+    type: String,
+    trim: true
+  }
+});
+
 const approvalStepSchema = new mongoose.Schema({
   approver: {
     type: mongoose.Schema.Types.ObjectId,
@@ -12,7 +54,7 @@ const approvalStepSchema = new mongoose.Schema({
   },
   decision: {
     type: String,
-    enum: ['approve', 'reject', 'verify'],
+    enum: ['approve', 'reject', 'verify', 'finalize'],
     required: true
   },
   remarks: {
@@ -39,53 +81,34 @@ const expenditureSchema = new mongoose.Schema({
     ref: 'BudgetHead',
     required: [true, 'Budget head is required']
   },
-  billNumber: {
+  eventName: {
     type: String,
-    required: [true, 'Bill number is required'],
+    required: [true, 'Event name is required'],
     trim: true
   },
-  billDate: {
+  eventType: {
+    type: String,
+    required: [true, 'Event type is required'],
+    enum: ['Seminar', 'Workshop', 'Association', 'Research', 'Other']
+  },
+  eventDate: {
     type: Date,
-    required: [true, 'Bill date is required']
+    required: [true, 'Event date is required']
   },
-  billAmount: {
+  description: {
+    type: String,
+    trim: true
+  },
+  expenseItems: [expenseItemSchema],
+  totalAmount: {
     type: Number,
-    required: [true, 'Bill amount is required'],
-    min: [0, 'Bill amount cannot be negative']
-  },
-  partyName: {
-    type: String,
-    required: [true, 'Party name is required'],
-    trim: true
-  },
-  expenseDetails: {
-    type: String,
-    required: [true, 'Expense details are required'],
-    trim: true
-  },
-  attachments: [{
-    filename: String,
-    originalName: String,
-    mimetype: String,
-    size: Number,
-    url: String,
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  referenceBudgetRegisterNo: {
-    type: String,
-    trim: true
+    required: true,
+    default: 0
   },
   status: {
     type: String,
     enum: ['pending', 'verified', 'approved', 'finalized', 'rejected'],
     default: 'pending'
-  },
-  currentStep: {
-    type: Number,
-    default: 0
   },
   approvalSteps: [approvalStepSchema],
   submittedBy: {
@@ -115,17 +138,17 @@ expenditureSchema.index({ budgetHead: 1 });
 expenditureSchema.index({ status: 1 });
 expenditureSchema.index({ submittedBy: 1 });
 expenditureSchema.index({ financialYear: 1 });
-expenditureSchema.index({ billDate: 1 });
+expenditureSchema.index({ eventDate: 1 });
 
 // Compound index for department submissions
 expenditureSchema.index({ department: 1, status: 1 });
 expenditureSchema.index({ department: 1, financialYear: 1 });
 
-// Pre-save middleware to set financial year based on bill date
+// Pre-save middleware to set financial year based on event date
 expenditureSchema.pre('save', function (next) {
-  if (this.billDate && !this.financialYear) {
-    const year = this.billDate.getFullYear();
-    const month = this.billDate.getMonth() + 1; // 0-indexed
+  if (this.eventDate && !this.financialYear) {
+    const year = this.eventDate.getFullYear();
+    const month = this.eventDate.getMonth() + 1; // 0-indexed
 
     // Financial year runs from April to March
     if (month >= 4) {
@@ -134,6 +157,12 @@ expenditureSchema.pre('save', function (next) {
       this.financialYear = `${year - 1}-${year}`;
     }
   }
+
+  // Calculate total amount if expenseItems changed
+  if (this.isModified('expenseItems')) {
+    this.totalAmount = this.expenseItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }
+
   next();
 });
 

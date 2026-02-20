@@ -28,8 +28,12 @@ api.interceptors.request.use(
       console.log('  FormData keys:', Array.from(config.data.keys()));
     }
     const token = localStorage.getItem('token');
+    console.log('[Auth Token]', token ? 'Found' : 'Not found in localStorage');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('[Authorization Header Set] Bearer token added');
+    } else {
+      console.warn('[Warning] No token found in localStorage. User may not be authenticated.');
     }
     return config;
   },
@@ -225,10 +229,36 @@ export const settingsAPI = {
 
 // Reports API
 export const reportAPI = {
-  getExpenditureReport: (params) => api.get('/reports/expenditures', { params }),
+  getExpenditureReport: (params) => {
+    const isCsv = params?.format === 'csv';
+    return api.get('/reports/expenditures', {
+      params,
+      ...(isCsv ? { responseType: 'blob' } : {})
+    });
+  },
   getAllocationReport: (params) => api.get('/reports/allocations', { params }),
   getDashboardReport: (params) => api.get('/reports/dashboard', { params }),
+  getBudgetProposalReport: (params) => api.get('/reports/proposals', { params }),
   getAuditReport: (params) => api.get('/reports/audit', { params }),
+  getConsolidatedBudgetReport: (params) => api.get('/consolidated-reports', { params }),
+  getBudgetUtilizationDashboard: (params) => api.get('/consolidated-reports/utilization', { params }),
+  getFundUtilizationTrend: (params) => api.get('/consolidated-reports/trend', { params }),
+};
+
+// Budget Proposals API
+export const budgetProposalAPI = {
+  getBudgetProposals: (params) => api.get('/budget-proposals', { params }),
+  getBudgetProposalById: (id) => api.get(`/budget-proposals/${id}`),
+  createBudgetProposal: (data) => api.post('/budget-proposals', data),
+  updateBudgetProposal: (id, data) => api.put(`/budget-proposals/${id}`, data),
+  submitBudgetProposal: (id) => api.put(`/budget-proposals/${id}/submit`),
+  verifyBudgetProposal: (id, data) => api.put(`/budget-proposals/${id}/verify`, data),
+  approveBudgetProposal: (id, data) => api.put(`/budget-proposals/${id}/approve`, data),
+  rejectBudgetProposal: (id, data) => api.put(`/budget-proposals/${id}/reject`, data),
+  resubmitBudgetProposal: (id) => api.post(`/budget-proposals/${id}/resubmit`),
+  deleteBudgetProposal: (id) => api.delete(`/budget-proposals/${id}`),
+  getBudgetProposalsStats: (params) => api.get('/budget-proposals/stats', { params }),
+  markProposalAsRead: (id) => api.put(`/budget-proposals/${id}/read`),
 };
 
 // Files API
@@ -252,6 +282,53 @@ export const auditLogAPI = {
   getAuditLogStats: (params) => api.get('/audit-logs/stats', { params }),
   createAuditLog: (data) => api.post('/audit-logs', data),
   exportAuditLogs: (params) => api.get('/audit-logs/export', { params }),
+};
+
+// Income API - Financial Governance
+export const incomeAPI = {
+  getIncomes: (params) => api.get('/income', { params }),
+  getIncomeById: (id) => api.get(`/income/${id}`),
+  getIncomeStats: (params) => api.get('/income/stats', { params }),
+  createIncome: (data) => api.post('/income', data),
+  updateIncome: (id, data) => api.put(`/income/${id}`, data),
+  verifyIncome: (id, data) => api.put(`/income/${id}/verify`, data),
+  deleteIncome: (id) => api.delete(`/income/${id}`)
+};
+
+// Financial Year API - Financial Governance
+export const financialYearAPI = {
+  getFinancialYears: (params) => api.get('/financial-years', { params }),
+  getActiveYear: () => api.get('/financial-years/active'),
+  getYearById: (id) => api.get(`/financial-years/${id}`),
+  getYearSummary: (id) => api.get(`/financial-years/${id}/summary`),
+  createYear: (data) => api.post('/financial-years', data),
+  lockYear: (id, data) => api.put(`/financial-years/${id}/lock`, data),
+  closeYear: (id, data) => api.put(`/financial-years/${id}/close`, data),
+  recalculateTotals: (id) => api.put(`/financial-years/${id}/recalculate`)
+};
+
+// System API
+export const systemAPI = {
+  getConcurrencyStatus: () => api.get('/system/concurrency-status'),
+  bulkSetup: (data) => api.post('/system/bulk-setup', data),
+};
+
+// AI Insights API - Intelligent Budget Analysis
+export const aiAPI = {
+  // Get all AI data for dashboard
+  getDashboard: (params) => api.get('/ai/dashboard', { params }),
+  // Anomaly detection
+  getAnomalies: (params) => api.get('/ai/anomalies', { params }),
+  // Risk scoring for departments
+  getRiskScores: (params) => api.get('/ai/risk-scores', { params }),
+  // AI-prioritized approval queue
+  getApprovalPriority: () => api.get('/ai/approval-priority'),
+  // Year-over-year comparison analysis
+  getYearComparison: (params) => api.get('/ai/year-comparison', { params }),
+  // Natural language insights
+  getInsights: (params) => api.get('/ai/insights', { params }),
+  // System health monitoring (admin only)
+  getSystemHealth: (params) => api.get('/ai/health', { params }),
 };
 
 export default api;

@@ -74,8 +74,16 @@ const emitToUser = (userId, event, data) => {
 // This would require tracking sockets by role, can be implemented if needed.
 // For now, we mainly need targeted user notifications.
 
+const broadcast = (event, data) => {
+    if (io) {
+        io.emit(event, data);
+        console.log(`[SOCKET] Broadcasted ${event} to all clients`);
+    }
+};
+
 module.exports = {
     initSocket,
     getIO,
-    emitToUser
+    emitToUser,
+    broadcast
 };

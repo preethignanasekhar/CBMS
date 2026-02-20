@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
-import './Layout.css';
+import './Layout.scss';
 
 const Layout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

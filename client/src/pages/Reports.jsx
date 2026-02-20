@@ -4,7 +4,7 @@ import { Receipt, IndianRupee, PieChart, ClipboardList, Download, FileSpreadshee
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import './Reports.css';
+import './Reports.scss';
 
 const Reports = () => {
   const [loading, setLoading] = useState(false);

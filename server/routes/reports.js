@@ -4,7 +4,8 @@ const {
   getExpenditureReport,
   getAllocationReport,
   getDashboardReport,
-  getAuditReport
+  getAuditReport,
+  getBudgetProposalReport
 } = require('../controllers/reportController');
 const { verifyToken, authorize } = require('../middleware/auth');
 
@@ -15,6 +16,7 @@ router.use(verifyToken);
 router.get('/expenditures', getExpenditureReport);
 router.get('/allocations', getAllocationReport);
 router.get('/dashboard', getDashboardReport);
+router.get('/proposals', getBudgetProposalReport);
 
 // Admin only routes
 router.get('/audit', authorize('admin'), getAuditReport);

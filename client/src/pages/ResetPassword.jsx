@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, GraduationCap } from 'lucide-react';
-import './ResetPassword.css';
+import './ResetPassword.scss';
 
 const ResetPassword = () => {
     const { token } = useParams();

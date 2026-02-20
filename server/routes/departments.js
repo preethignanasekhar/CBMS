@@ -18,7 +18,7 @@ router.use(verifyToken);
 router.get('/:id/detail', getDepartmentDetail);
 
 // Allow authorized roles to view department list
-router.get('/', authorize('admin', 'principal', 'vice_principal', 'office', 'auditor', 'hod'), getDepartments);
+router.get('/', authorize('admin', 'principal', 'vice_principal', 'office', 'auditor', 'hod', 'department'), getDepartments);
 router.get('/stats', authorize('admin', 'principal', 'vice_principal', 'office', 'auditor'), getDepartmentStats);
 
 // All other routes require admin access

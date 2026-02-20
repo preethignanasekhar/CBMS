@@ -1,5 +1,4 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -10,14 +9,20 @@ import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
-import DepartmentDashboard from './pages/DepartmentDashboard';
+
 import HODDashboard from './pages/HODDashboard';
+import HODAnalytics from './pages/HODAnalytics';
+import HODHistory from './pages/HODHistory';
+import OfficeDashboard from './pages/OfficeDashboard';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard';
 import GraphicalDashboard from './pages/GraphicalDashboard';
-import DepartmentDetail from './pages/DepartmentDetail';
-import BudgetAllocations from './pages/BudgetAllocations';
-import SubmitExpenditure from './pages/SubmitExpenditure';
-import Expenditures from './pages/Expenditures';
+
+
+import {
+  Expenditures,
+  SubmitExpenditure,
+  ResubmitExpenditure
+} from './pages/ExpenditureModule';
 import ApprovalsQueue from './pages/ApprovalsQueue';
 import YearComparison from './pages/YearComparison';
 import Reports from './pages/Reports';
@@ -25,18 +30,33 @@ import AuditLogs from './pages/AuditLogs';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
-import UserForm from './pages/UserForm';
-import Departments from './pages/Departments';
-import DepartmentForm from './pages/DepartmentForm';
-import BudgetHeads from './pages/BudgetHeads';
-import BudgetHeadForm from './pages/BudgetHeadForm';
 import Categories from './pages/Categories';
-import CategoryForm from './pages/CategoryForm';
-import ResubmitExpenditure from './pages/ResubmitExpenditure';
 import BulkUpload from './pages/BulkUpload';
-import DepartmentUsers from './pages/DepartmentUsers';
+import {
+  DepartmentDashboard,
+  DepartmentDetail,
+  DepartmentForm,
+  Departments,
+  DepartmentUsers
+} from './pages/DepartmentModule';
 import Profile from './pages/Profile';
-import './App.css';
+import ConsolidatedBudgetReport from './pages/ConsolidatedBudgetReport';
+import {
+  BudgetAllocations,
+  BudgetHeads,
+  BudgetHeadForm,
+  BudgetProposals,
+  BudgetProposalForm,
+  BudgetUtilizationDashboard,
+  BudgetProposalReport,
+  AllocationForm
+} from './pages/BudgetModule';
+import {
+  IncomeReceipts,
+  IncomeForm
+} from './pages/IncomeModule';
+import FinancialYearManagement from './pages/FinancialYearManagement';
+import './App.scss';
 
 // Dashboard Wrapper Component
 const DashboardWrapper = () => {
@@ -50,6 +70,10 @@ const DashboardWrapper = () => {
 
   if (user.role === 'hod') {
     return <HODDashboard />;
+  }
+
+  if (user.role === 'office') {
+    return <OfficeDashboard />;
   }
 
   return <Dashboard />;
@@ -71,8 +95,8 @@ function App() {
 
                 {/* Admin Routes */}
                 <Route path="users" element={<Users />} />
-                <Route path="users/add" element={<UserForm />} />
-                <Route path="users/edit/:id" element={<UserForm />} />
+                <Route path="users/add" element={<Users />} />
+                <Route path="users/edit/:id" element={<Users />} />
                 <Route path="departments" element={<Departments />} />
                 <Route path="departments/add" element={<DepartmentForm />} />
                 <Route path="departments/edit/:id" element={<DepartmentForm />} />
@@ -80,15 +104,30 @@ function App() {
                 <Route path="budget-heads/add" element={<BudgetHeadForm />} />
                 <Route path="budget-heads/edit/:id" element={<BudgetHeadForm />} />
                 <Route path="categories" element={<Categories />} />
-                <Route path="categories/add" element={<CategoryForm />} />
-                <Route path="categories/edit/:id" element={<CategoryForm />} />
+                <Route path="categories/add" element={<Categories />} />
+                <Route path="categories/edit/:id" element={<Categories />} />
                 <Route path="settings" element={<Settings />} />
 
                 {/* Office Routes */}
                 <Route path="allocations" element={<BudgetAllocations />} />
+                <Route path="allocations/add" element={<AllocationForm />} />
+                <Route path="allocations/edit/:id" element={<AllocationForm />} />
                 <Route path="bulk-upload" element={<BulkUpload />} />
+                <Route path="budget-proposals" element={<BudgetProposals />} />
+                <Route path="budget-proposals/add" element={<BudgetProposalForm />} />
+                <Route path="budget-proposals/edit/:id" element={<BudgetProposalForm />} />
+                <Route path="budget-proposals/:id" element={<BudgetProposalForm />} />
+                <Route path="consolidated-budget-report" element={<ConsolidatedBudgetReport />} />
+                <Route path="budget-utilization-dashboard" element={<BudgetUtilizationDashboard />} />
+                <Route path="budget-proposal-report" element={<BudgetProposalReport />} />
                 <Route path="approvals" element={<ApprovalsQueue />} />
                 <Route path="reports" element={<Reports />} />
+
+                {/* Financial Governance Routes */}
+                <Route path="income" element={<IncomeReceipts />} />
+                <Route path="income/add" element={<IncomeForm />} />
+                <Route path="income/edit/:id" element={<IncomeForm />} />
+                <Route path="financial-years" element={<FinancialYearManagement />} />
 
                 {/* Department Routes */}
                 <Route path="expenditures" element={<Expenditures />} />
@@ -96,7 +135,8 @@ function App() {
                 <Route path="resubmit-expenditure/:id" element={<ResubmitExpenditure />} />
 
                 {/* HOD Routes */}
-                <Route path="department-expenditures" element={<HODDashboard />} />
+                <Route path="hod-analytics" element={<HODAnalytics />} />
+                <Route path="hod-history" element={<HODHistory />} />
                 <Route path="department-users" element={<DepartmentUsers />} />
 
                 {/* Management Routes */}

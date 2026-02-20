@@ -6,20 +6,35 @@ const { recordAuditLog } = require('../utils/auditService');
 // @access  Private/Admin
 const getBudgetHeads = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, category, isActive } = req.query;
-    const query = {};
+    const { page = 1, limit = 10, search, category, isActive, department } = req.query;
+    const conditions = [];
 
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
+      conditions.push({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      });
     }
-    if (category) query.category = category;
-    if (isActive !== undefined) query.isActive = isActive === 'true';
+    if (category) conditions.push({ category: category });
+    if (isActive !== undefined) conditions.push({ isActive: isActive === 'true' });
+
+    // Filter by department: show global budget heads (department=null) or department-specific ones
+    if (department) {
+      conditions.push({
+        $or: [
+          { department: null },
+          { department: department }
+        ]
+      });
+    }
+
+    const query = conditions.length > 0 ? { $and: conditions } : {};
 
     const budgetHeads = await BudgetHead.find(query)
       .populate('createdBy', 'name email')
+      .populate('department', 'name code')
       .sort({ name: 1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);

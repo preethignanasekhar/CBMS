@@ -1,28 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { reportAPI } from '../services/api';
 import { getCurrentFinancialYear } from '../utils/dateUtils';
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
 import ContentCard from '../components/Common/ContentCard';
+import AIInsightsPanel from '../components/AI/AIInsightsPanel';
 import {
   Wallet,
   PieChart,
   FileText,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  Clock
 } from 'lucide-react';
-import './Dashboard.css';
+import './Dashboard.scss';
 
 const Dashboard = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState({
     stats: {
-      allocated: { value: 0, trend: 0 },
+      requested: { value: 0, trend: 0 },
+      approved: { value: 0, trend: 0 },
       utilized: { value: 0, trend: 0 },
-      requests: { value: 0, trend: 0 },
+      pending: { value: 0, trend: 0 },
       balance: { value: 0, trend: 0 }
     },
     activities: []
@@ -34,7 +39,25 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [user]);
+
+  const { socket } = useSocket();
+
+  // Real-time update listener
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUpdate = (data) => {
+      console.log('Real-time update received:', data);
+      fetchData();
+    };
+
+    socket.on('dashboard_update', handleUpdate);
+
+    return () => {
+      socket.off('dashboard_update', handleUpdate);
+    };
+  }, [socket]);
 
   const fetchData = async () => {
     try {
@@ -54,20 +77,19 @@ const Dashboard = () => {
   };
 
   const processDashboardData = (data) => {
-    // 1. Update Stats
-    const allocated = data.totalAllocated || 0;
-    const utilized = data.totalSpent || 0;
-    const requests = data.statusBreakdown?.pending || 0; // Using count of pending requests
-    const balance = allocated - utilized;
-
-    // Calculate mock trends or real ones if available
-    const getTrend = (val, mock) => val > 0 ? mock : 0;
+    // 1. Update Stats based on 5-Pillar requirement
+    const requested = data.totalRequested || 0;
+    const approved = data.totalAllocated || 0;
+    const utilized = data.totalUtilized || 0;
+    const pending = data.totalPendingApprovals || 0;
+    const balance = data.remainingBalance || 0;
 
     setDashboardData({
       stats: {
-        allocated: { value: allocated, trend: 0 },
+        requested: { value: requested, trend: 0 },
+        approved: { value: approved, trend: 0 },
         utilized: { value: utilized, trend: 0 },
-        requests: { value: requests, trend: 0 },
+        pending: { value: pending, trend: 0 },
         balance: { value: balance, trend: 0 }
       },
       activities: []
@@ -112,14 +134,14 @@ const Dashboard = () => {
           name: 'Avg. Monthly Budget',
           type: 'bar',
           data: budgetData,
-          itemStyle: { color: '#1a237e', borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: '#0f172a', borderRadius: [4, 4, 0, 0] },
           barWidth: 12
         },
         {
           name: 'Expenditure',
           type: 'bar',
           data: expenditureData,
-          itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: '#2563eb', borderRadius: [4, 4, 0, 0] },
           barWidth: 12
         }
       ]
@@ -131,7 +153,7 @@ const Dashboard = () => {
       value: deptBreakdown[deptName].spent,
       name: deptName,
       itemStyle: {
-        color: ['#1a237e', '#3b82f6', '#9ca3af', '#10b981', '#f59e0b'][index % 5]
+        color: ['#0f172a', '#2563eb', '#64748b', '#059669', '#d97706'][index % 5]
       }
     })).filter(item => item.value > 0);
 
@@ -177,35 +199,40 @@ const Dashboard = () => {
         subtitle="Financial Overview & Analytics"
       />
 
-      {/* Top Stats Row */}
-      <div className="stats-grid">
+      {/* Top Stats Row - Using 5 Pillar Layout */}
+      <div className="stats-grid-5">
         <StatCard
-          title="Total Allocated"
-          value={formatCurrency(dashboardData.stats.allocated.value)}
-          icon={<Wallet size={24} />}
-          trend={dashboardData.stats.allocated.trend}
-          color="var(--icon-bg-uniform)"
+          title="Requested Amount"
+          value={formatCurrency(dashboardData.stats.requested.value)}
+          icon={<FileText size={20} />}
+          tooltipText="Total amount proposed in initial budget proposals"
         />
         <StatCard
-          title="Total Utilized"
+          title="Approved Budget"
+          value={formatCurrency(dashboardData.stats.approved.value)}
+          icon={<CheckCircle size={20} />}
+          tooltipText="Total approved/allocated budget for the year"
+        />
+        <StatCard
+          title="Utilized Amount"
           value={formatCurrency(dashboardData.stats.utilized.value)}
-          icon={<PieChart size={24} />}
-          trend={dashboardData.stats.utilized.trend}
-          color="var(--icon-bg-uniform)"
+          icon={<CreditCard size={20} />}
+          color="var(--success)"
+          tooltipText="Total expenditure finalized and deducted"
         />
         <StatCard
-          title="Pending Approvals"
-          value={`${dashboardData.stats.requests.value}`}
-          icon={<FileText size={24} />}
-          trend={dashboardData.stats.requests.trend}
-          color="var(--icon-bg-uniform)"
+          title="Pending Approval"
+          value={formatCurrency(dashboardData.stats.pending.value)}
+          icon={<Clock size={20} />}
+          isPending={true}
+          disclaimer="Not yet adjusted from approved budget"
+          tooltipText="Expenditures awaiting final office approval"
         />
         <StatCard
           title="Remaining Balance"
           value={formatCurrency(dashboardData.stats.balance.value)}
-          icon={<CreditCard size={24} />}
-          trend={dashboardData.stats.balance.trend}
-          color="var(--icon-bg-uniform)"
+          icon={<Wallet size={20} />}
+          tooltipText="Approved Budget minus Utilized Amount"
         />
       </div>
 
@@ -241,6 +268,13 @@ const Dashboard = () => {
          For now, I'll assume we want to focus on charts. 
          But reusing the old 'expenditureAPI.getExpenditures' is safer if we want this table.
       */}
+
+      {/* AI Insights Panel - Only visible to admin/office roles */}
+      {['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
+        <div className="ai-section">
+          <AIInsightsPanel financialYear={getCurrentFinancialYear()} />
+        </div>
+      )}
     </div>
   );
 };

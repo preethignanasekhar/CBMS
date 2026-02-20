@@ -12,7 +12,7 @@ import {
   Settings,
   ChevronDown
 } from 'lucide-react';
-import './Header.css';
+import './Header.scss';
 
 const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuth();

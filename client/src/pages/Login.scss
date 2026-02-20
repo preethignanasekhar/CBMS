@@ -1,0 +1,263 @@
+/* Login.css - Split Layout Design */
+
+.login-wrapper {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Left Section */
+.login-left {
+  flex: 1;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.illustration-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.illustration-mockup {
+  position: relative;
+  max-width: 500px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.building-icon-large {
+  animation: float 6s ease-in-out infinite;
+}
+
+.floating-coin {
+  position: absolute;
+  top: 20%;
+  right: 20%;
+  background: var(--primary);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: float 4s ease-in-out infinite reverse;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-15px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Brand */
+.brand-section {
+  margin-top: auto;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand-logo h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.brand-section h2 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.brand-section p {
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+/* Right Section */
+.login-right {
+  flex: 1;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+
+/* Login Card */
+.login-box {
+  background: white;
+  padding: 2.5rem;
+  border-radius: 1rem;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.login-header h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 2.25rem;
+}
+
+/* ========================= */
+/* 🔥 FLOATING INPUT SYSTEM */
+/* ========================= */
+
+.form-group.floating {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+
+.form-group.floating input {
+  width: 100%;
+  padding: 1.25rem 1rem 0.5rem;
+  font-size: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: transparent;
+}
+
+.form-group.floating input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Placeholder-like label */
+.form-group.floating label {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 0.95rem;
+  pointer-events: none;
+  transition: all 0.2s ease;
+
+  padding: 0 0.25rem;
+}
+
+/* 🔥 Animation trigger */
+.form-group.floating input:focus+label,
+.form-group.floating input:not(:placeholder-shown)+label {
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--primary);
+  background: white;
+  /* Ensure it covers the border */
+  z-index: 5;
+}
+
+/* Password eye wrapper (Tooltip) */
+.password-toggle-tooltip {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  display: flex;
+}
+
+/* Password eye button */
+.toggle-password {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Footer links */
+.form-footer {
+  text-align: right;
+}
+
+.form-footer a {
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.signin-btn {
+  margin-top: 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  width: 100%;
+  /* 🔥 makes it align with inputs */
+  display: block;
+  /* 🔥 removes inline spacing issues */
+}
+
+
+.signin-btn:hover {
+  background: var(--primary-hover);
+}
+
+.support-link {
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.support-link a {
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+/* Error */
+.error-alert {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .login-wrapper {
+    flex-direction: column;
+  }
+
+  .login-left {
+    display: none;
+  }
+
+  .login-right {
+    min-height: 100vh;
+    padding: 1rem;
+  }
+}

@@ -5,7 +5,7 @@ import { Download, FileSpreadsheet, FileText, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import './YearComparison.css';
+import './YearComparison.scss';
 
 const YearComparison = () => {
   const [loading, setLoading] = useState(false);

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { settingsAPI } from '../services/api';
+import { settingsAPI, systemAPI } from '../services/api';
 import PageHeader from '../components/Common/PageHeader';
 import ContentCard from '../components/Common/ContentCard';
-import { Settings as SettingsIcon, IndianRupee, Bell, Shield, Server, RotateCcw, Save } from 'lucide-react';
-import './Settings.css';
+import { Settings as SettingsIcon, IndianRupee, Bell, Shield, Server, RotateCcw, Save, Database, AlertTriangle, Loader2 } from 'lucide-react';
+import './Settings.scss';
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
@@ -13,6 +13,8 @@ const Settings = () => {
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState('general');
   const [formData, setFormData] = useState({});
+  const [bulkSetupLoading, setBulkSetupLoading] = useState(false);
+  const [bulkSetupResult, setBulkSetupResult] = useState(null);
 
   const tabs = [
     { id: 'general', label: 'General', icon: <SettingsIcon /> },
@@ -88,6 +90,24 @@ const Settings = () => {
       } catch (err) {
         setError('Failed to reset settings');
         console.error('Error resetting settings:', err);
+      }
+    }
+  };
+
+  const handleBulkSetup = async () => {
+    if (window.confirm('CRITICAL: This will reset roles and passwords for all institutional accounts. Proceed with bulk configuration?')) {
+      try {
+        setBulkSetupLoading(true);
+        setError(null);
+        const response = await systemAPI.bulkSetup({ emailDomain: 'bms.edu.in' });
+        setBulkSetupResult(response.data);
+        setSuccess('Institutional bulk setup completed successfully!');
+        setTimeout(() => setSuccess(null), 5000);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Bulk setup failed');
+        console.error('Bulk setup error:', err);
+      } finally {
+        setBulkSetupLoading(false);
       }
     }
   };
@@ -609,16 +629,47 @@ const Settings = () => {
                     </select>
                   </div>
 
-                  <div className="form-group">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="autoBackup"
-                        checked={formData.system?.autoBackup || false}
-                        onChange={handleInputChange}
-                      />
-                      Enable Auto Backup
-                    </label>
+
+                  <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid #eee' }}></div>
+
+                  <h3 className="section-title">Production Administration</h3>
+                  <div style={{ backgroundColor: '#fff5f5', border: '1px solid #feb2b2', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
+                    <AlertTriangle size={24} style={{ color: '#e53e3e', flexShrink: 0 }} />
+                    <div className="warning-content">
+                      <h4 style={{ color: '#c53030', margin: '0 0 0.5rem 0' }}>Institutional Bulk Setup</h4>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#742a2a' }}>This will automatically configure 10 departments and 34 users according to official role mappings. <strong>Existing accounts will be updated.</strong> This action should only be performed once during initial deployment.</p>
+                    </div>
+                  </div>
+
+                  <div className="bulk-setup-action">
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{
+                        backgroundColor: bulkSetupLoading ? '#cbd5e0' : '#e53e3e',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                      onClick={handleBulkSetup}
+                      disabled={bulkSetupLoading}
+                    >
+                      {bulkSetupLoading ? (
+                        <>
+                          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Database size={16} /> Run Institutional Bulk Setup
+                        </>
+                      )}
+                    </button>
+                    {bulkSetupResult && (
+                      <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f0fff4', border: '1px solid #9ae6b4', borderRadius: '0.375rem' }}>
+                        <p style={{ color: '#276749', margin: 0, fontSize: '0.875rem' }}>✅ {bulkSetupResult.message} ({bulkSetupResult.log?.length} items processed)</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -631,52 +682,54 @@ const Settings = () => {
             </form>
           </div>
 
-          {systemInfo && (
-            <div className="system-info-panel">
-              <h3>System Information</h3>
-              <div className="info-grid">
-                <div className="info-item">
-                  <label>Version</label>
-                  <span>{systemInfo.version}</span>
-                </div>
-                <div className="info-item">
-                  <label>Build Date</label>
-                  <span>{systemInfo.buildDate}</span>
-                </div>
-                <div className="info-item">
-                  <label>Node Version</label>
-                  <span>{systemInfo.nodeVersion}</span>
-                </div>
-                <div className="info-item">
-                  <label>Platform</label>
-                  <span>{systemInfo.platform}</span>
-                </div>
-                <div className="info-item">
-                  <label>Uptime</label>
-                  <span>{formatUptime(systemInfo.uptime)}</span>
-                </div>
-                <div className="info-item">
-                  <label>Memory Usage</label>
-                  <span>{formatBytes(systemInfo.memoryUsage.heapUsed)} / {formatBytes(systemInfo.memoryUsage.heapTotal)}</span>
-                </div>
-                <div className="info-item">
-                  <label>Environment</label>
-                  <span>{systemInfo.environment}</span>
-                </div>
-                <div className="info-item">
-                  <label>Database</label>
-                  <span>{systemInfo.database}</span>
-                </div>
-                <div className="info-item">
-                  <label>Last Backup</label>
-                  <span>{new Date(systemInfo.lastBackup).toLocaleString()}</span>
+          {
+            systemInfo && (
+              <div className="system-info-panel">
+                <h3>System Information</h3>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <label>Version</label>
+                    <span>{systemInfo.version}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Build Date</label>
+                    <span>{systemInfo.buildDate}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Node Version</label>
+                    <span>{systemInfo.nodeVersion}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Platform</label>
+                    <span>{systemInfo.platform}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Uptime</label>
+                    <span>{formatUptime(systemInfo.uptime)}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Memory Usage</label>
+                    <span>{formatBytes(systemInfo.memoryUsage.heapUsed)} / {formatBytes(systemInfo.memoryUsage.heapTotal)}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Environment</label>
+                    <span>{systemInfo.environment}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Database</label>
+                    <span>{systemInfo.database}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Last Backup</label>
+                    <span>{new Date(systemInfo.lastBackup).toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            )
+          }
+        </div >
+      </div >
+    </div >
   );
 };
 

@@ -16,8 +16,13 @@ const expenditureRoutes = require('./routes/expenditures');
 const fileRoutes = require('./routes/files');
 const auditLogRoutes = require('./routes/auditLogs');
 const reportRoutes = require('./routes/reports');
+const consolidatedReportRoutes = require('./routes/consolidatedReports');
+const budgetProposalRoutes = require('./routes/budgetProposals');
 const systemRoutes = require('./routes/system');
 const pushRoutes = require('./routes/pushRoutes');
+const incomeRoutes = require('./routes/income');
+const financialYearRoutes = require('./routes/financialYears');
+const aiRoutes = require('./routes/ai');
 
 // Import services
 const { initReminderService } = require('./services/reminderService');
@@ -46,11 +51,20 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Database connection status middleware
 app.use((req, res, next) => {
-  if (mongoose.connection.readyState !== 1 && req.url !== '/health' && !req.url.startsWith('/api-status')) {
+  const state = mongoose.connection.readyState;
+  if (state !== 1 && req.url !== '/health' && !req.url.startsWith('/api-status')) {
+    const statusMap = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting'
+    };
+    console.warn(`[SERVER] 503 Error: Database is ${statusMap[state] || state}. Request: ${req.method} ${req.url}`);
     return res.status(503).json({
       success: false,
       message: 'Database is still connecting, please try again in a moment',
-      status: mongoose.connection.readyState
+      status: state,
+      statusLabel: statusMap[state] || 'unknown'
     });
   }
   next();
@@ -90,7 +104,8 @@ const statusHandler = (req, res) => {
       allocations: '/api/allocations',
       expenditures: '/api/expenditures',
       notifications: '/api/notifications',
-      reports: '/api/reports'
+      reports: '/api/reports',
+      ai: '/api/ai'
     }
   });
 };
@@ -105,13 +120,19 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/budget-heads', budgetHeadRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/allocations/bulk-upload', require('./routes/bulkUpload'));
 app.use('/api/allocations', allocationRoutes);
 app.use('/api/expenditures', expenditureRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/consolidated-reports', consolidatedReportRoutes);
+app.use('/api/budget-proposals', budgetProposalRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/income', incomeRoutes);
+app.use('/api/financial-years', financialYearRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -156,24 +177,55 @@ app.use((req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
+
+// Connection event listeners
+mongoose.connection.on('connecting', () => console.log('[DB] Connecting...'));
+mongoose.connection.on('connected', () => console.log('[DB] Connection established'));
+mongoose.connection.on('error', (err) => console.error('[DB] Connection error:', err));
+mongoose.connection.on('disconnected', () => console.log('[DB] Connection lost'));
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ Connected to MongoDB');
-    // Initialize reminder service after DB connection
-    initReminderService();
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
-  });
+const mongoUri = process.env.MONGODB_URI;
+console.log('[DB] Connecting to MongoDB...');
+console.log('[DB] URI:', mongoUri ? mongoUri.replace(/:.*@/, ':****@').split('?')[0] : 'UNDEFINED');
+
+const dbOptions = {
+  serverSelectionTimeoutMS: 30000, // Increase to 30 seconds
+  socketTimeoutMS: 45000,
+  heartbeatFrequencyMS: 10000, // Check heartbeats every 10 seconds
+  connectTimeoutMS: 30000,
+  family: 4 // Force IPv4 to avoid connection issues
+};
+
+const connectWithRetry = () => {
+  console.log('[DB] Attempting to connect to MongoDB...');
+  mongoose.connect(mongoUri, dbOptions)
+    .then(() => {
+      console.log('✅ [DB] Connected to MongoDB');
+      // Initialize reminder service after DB connection
+      initReminderService();
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB connection error:', err.message);
+      if (err.name === 'MongooseServerSelectionError') {
+        console.error('👉 TIP: Check if your IP address is whitelisted in MongoDB Atlas.');
+      }
+      console.log('[DB] Retrying in 5 seconds...');
+      setTimeout(connectWithRetry, 5000);
+    });
+};
+
+connectWithRetry();
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   const addr = server.address();
-  console.log(`🚀 CBMS Server is running on http://${addr.address}:${addr.port}`);
+  const address = addr ? addr.address : '0.0.0.0';
+  const port = addr ? addr.port : PORT;
+
+  console.log(`🚀 CBMS Server is running on http://${address}:${port}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API Base URL: http://localhost:${addr.port}/api`);
+  console.log(`🔗 API Base URL: http://localhost:${port}/api`);
 
   // Initialize Socket.io
   initSocket(server);

@@ -42,6 +42,16 @@ export default defineConfig(({ mode }) => {
         build: {
             outDir: 'dist',
         },
+        css: {
+            preprocessorOptions: {
+                shared: {
+                    api: 'modern'
+                },
+                scss: {
+                    api: 'modern',
+                }
+            }
+        },
         envPrefix: 'REACT_APP_',
     };
 });

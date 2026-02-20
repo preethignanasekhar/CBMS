@@ -10,6 +10,11 @@ const {
   bulkCreateAllocations,
   getYearComparison
 } = require('../controllers/allocationController');
+const {
+  getAllocationHistory,
+  getAllocationVersion,
+  rollbackAllocation
+} = require('../controllers/allocationHistoryController');
 const { verifyToken, authorize } = require('../middleware/auth');
 
 // All routes require authentication
@@ -27,5 +32,10 @@ router.post('/', createAllocation);
 router.post('/bulk', bulkCreateAllocations);
 router.put('/:id', updateAllocation);
 router.delete('/:id', deleteAllocation);
+
+// History routes
+router.get('/:id/history', getAllocationHistory);
+router.get('/:id/history/:version', getAllocationVersion);
+router.post('/:id/rollback/:version', authorize('admin', 'office'), rollbackAllocation);
 
 module.exports = router;

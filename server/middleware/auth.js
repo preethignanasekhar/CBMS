@@ -67,9 +67,12 @@ const authorize = (...roles) => {
     }
 
     if (!roles.includes(req.user.role)) {
+      console.log(`[AUTH-DENY] ${req.method} ${req.path} - User role: ${req.user.role}, Required roles: ${roles.join(', ')}`);
       return res.status(403).json({ 
         success: false, 
-        message: 'Access denied. Insufficient permissions.' 
+        message: 'Access denied. Insufficient permissions.',
+        userRole: req.user.role,
+        requiredRoles: roles
       });
     }
 

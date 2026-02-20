@@ -2,6 +2,9 @@ const Allocation = require('../models/Allocation');
 const Department = require('../models/Department');
 const BudgetHead = require('../models/BudgetHead');
 const Expenditure = require('../models/Expenditure');
+const AllocationHistory = require('../models/AllocationHistory');
+const BudgetProposal = require('../models/BudgetProposal');
+const AllocationAmendment = require('../models/AllocationAmendment');
 const { recordAuditLog } = require('../utils/auditService');
 
 // @desc    Get all allocations
@@ -21,7 +24,14 @@ const getAllocations = async (req, res) => {
     const query = {};
 
     if (financialYear) query.financialYear = financialYear;
-    if (department) query.department = department;
+
+    // RBAC: Enforce department filter for department/hod roles
+    if (req.user.role === 'department' || req.user.role === 'hod') {
+      query.department = req.user.department;
+    } else if (department) {
+      query.department = department;
+    }
+
     if (budgetHead) query.budgetHead = budgetHead;
     if (search) {
       query.$or = [
@@ -37,12 +47,26 @@ const getAllocations = async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
+    // Flatten allocations for frontend
+    const flattenedAllocations = allocations.map(alloc => {
+      const obj = alloc.toObject({ virtuals: true });
+      return {
+        ...obj,
+        departmentName: alloc.department?.name,
+        departmentId: alloc.department?._id,
+        departmentCode: alloc.department?.code,
+        budgetHeadName: alloc.budgetHead?.name,
+        budgetHeadId: alloc.budgetHead?._id,
+        budgetHeadCode: alloc.budgetHead?.code
+      };
+    });
+
     const total = await Allocation.countDocuments(query);
 
     res.json({
       success: true,
       data: {
-        allocations,
+        allocations: flattenedAllocations,
         pagination: {
           current: parseInt(page),
           pages: Math.ceil(total / limit),
@@ -117,15 +141,71 @@ const createAllocation = async (req, res) => {
       department,
       budgetHead,
       allocatedAmount,
-      remarks
+      remarks,
+      proposalId,
+      allowLegacy // Optional flag for admin to create legacy allocations
     } = req.body;
 
     // Validate required fields
     if (!financialYear || !department || !budgetHead || !allocatedAmount) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Financial year, department, budget head, and allocated amount are required'
       });
+    }
+
+    // GOVERNANCE: Require proposalId for new allocations (unless legacy flag set by admin)
+    if (!proposalId && !allowLegacy) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Allocations must be created from approved budget proposals. Please provide proposalId.',
+        hint: 'To create allocation, first create and approve a budget proposal'
+      });
+    }
+
+    // If proposalId provided, validate it
+    if (proposalId) {
+      const proposal = await BudgetProposal.findById(proposalId).session(session);
+      if (!proposal) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'Budget proposal not found'
+        });
+      }
+
+      if (proposal.status !== 'approved') {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: `Budget proposal must be approved before creating allocation. Current status: ${proposal.status}`
+        });
+      }
+
+      // Validate proposal matches allocation data
+      if (proposal.department.toString() !== department.toString()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'Proposal department does not match allocation department'
+        });
+      }
+
+      if (proposal.financialYear !== financialYear) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'Proposal financial year does not match allocation financial year'
+        });
+      }
     }
 
     // Check if allocation already exists for this combination
@@ -137,6 +217,7 @@ const createAllocation = async (req, res) => {
 
     if (existingAllocation) {
       await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Allocation already exists for this department and budget head in the specified financial year'
@@ -147,6 +228,7 @@ const createAllocation = async (req, res) => {
     const deptExists = await Department.findById(department).session(session);
     if (!deptExists) {
       await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Department not found'
@@ -157,6 +239,7 @@ const createAllocation = async (req, res) => {
     const budgetHeadExists = await BudgetHead.findById(budgetHead).session(session);
     if (!budgetHeadExists) {
       await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Budget head not found'
@@ -169,30 +252,37 @@ const createAllocation = async (req, res) => {
       budgetHead,
       allocatedAmount: parseFloat(allocatedAmount),
       remarks,
+      sourceProposalId: proposalId || null, // Link to proposal or null for legacy
+      status: 'active',
       createdBy: req.user._id
+    }], { session });
+
+    const newAllocation = allocation[0];
+
+    // Create initial history record within the same session
+    await AllocationHistory.create([{
+      allocationId: newAllocation._id,
+      version: 1,
+      changeType: 'created',
+      snapshot: {
+        department: department,
+        budgetHead: budgetHead,
+        allocatedAmount: parseFloat(allocatedAmount),
+        spentAmount: 0,
+        financialYear: financialYear,
+        remarks: remarks
+      },
+      changes: {},
+      changeReason: 'Initial allocation created',
+      changedBy: req.user._id
     }], { session });
 
     await session.commitTransaction();
 
-    const populatedAllocation = await Allocation.findById(allocation[0]._id)
+    const populatedAllocation = await Allocation.findById(newAllocation._id)
       .populate('department', 'name code')
       .populate('budgetHead', 'name category')
       .populate('createdBy', 'name email');
-
-    // Log the creation
-    await recordAuditLog({
-      eventType: 'allocation_created',
-      req,
-      targetEntity: 'Allocation',
-      targetId: populatedAllocation._id,
-      details: {
-        financialYear: populatedAllocation.financialYear,
-        department: populatedAllocation.department.name,
-        budgetHead: populatedAllocation.budgetHead.name,
-        amount: populatedAllocation.allocatedAmount
-      },
-      newValues: populatedAllocation
-    });
 
     res.status(201).json({
       success: true,
@@ -220,7 +310,7 @@ const updateAllocation = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { allocatedAmount, remarks } = req.body;
+    const { allocatedAmount, remarks, changeReason } = req.body;
     const allocationId = req.params.id;
 
     const allocation = await Allocation.findById(allocationId).session(session);
@@ -241,10 +331,115 @@ const updateAllocation = async (req, res) => {
       });
     }
 
+    // GOVERNANCE: Check if amount change exceeds 5% threshold
+    if (allocatedAmount && parseFloat(allocatedAmount) !== allocation.allocatedAmount) {
+      const changeAmount = parseFloat(allocatedAmount) - allocation.allocatedAmount;
+      const changePercent = Math.abs((changeAmount / allocation.allocatedAmount) * 100);
+
+      // If change exceeds 5%, create amendment request instead of direct update
+      if (changePercent > 5) {
+        // Check if user is admin/principal (they can bypass)
+        const canBypass = ['admin', 'principal'].includes(req.user.role);
+
+        if (!canBypass) {
+          await session.abortTransaction();
+
+          // Create amendment request
+          const amendment = await AllocationAmendment.create({
+            allocation: allocationId,
+            originalAmount: allocation.allocatedAmount,
+            requestedAmount: parseFloat(allocatedAmount),
+            changeReason: changeReason || remarks || 'Allocation update request',
+            requestedBy: req.user._id,
+            status: 'pending'
+          });
+
+          await recordAuditLog({
+            eventType: 'allocation_amendment_requested',
+            req,
+            targetEntity: 'AllocationAmendment',
+            targetId: amendment._id,
+            details: {
+              allocation: allocationId,
+              originalAmount: allocation.allocatedAmount,
+              requestedAmount: parseFloat(allocatedAmount),
+              changePercent: changePercent.toFixed(2)
+            }
+          });
+
+          return res.status(202).json({
+            success: true,
+            message: `Change exceeds 5% threshold (${changePercent.toFixed(1)}%). Amendment request created for Principal/Admin approval.`,
+            data: { amendment },
+            requiresApproval: true
+          });
+        }
+
+        // Admin/Principal bypassing - log it
+        await recordAuditLog({
+          eventType: 'allocation_updated',
+          req,
+          targetEntity: 'Allocation',
+          targetId: allocationId,
+          details: {
+            changePercent: changePercent.toFixed(2),
+            bypassedApproval: true,
+            bypassReason: 'Admin/Principal privilege'
+          }
+        });
+      }
+    }
+
+    // Store previous values for history
+    const previousValues = {
+      allocatedAmount: allocation.allocatedAmount,
+      spentAmount: allocation.spentAmount,
+      remarks: allocation.remarks
+    };
+
+    // Get current version number
+    const latestHistory = await AllocationHistory.findOne({ allocationId })
+      .sort({ version: -1 })
+      .session(session);
+    const newVersion = latestHistory ? latestHistory.version + 1 : 1;
+
+    // Create history record before update
+    const changes = {};
+    if (allocatedAmount !== undefined && parseFloat(allocatedAmount) !== allocation.allocatedAmount) {
+      changes.allocatedAmount = {
+        old: allocation.allocatedAmount,
+        new: parseFloat(allocatedAmount)
+      };
+    }
+    if (remarks !== undefined && remarks !== allocation.remarks) {
+      changes.remarks = {
+        old: allocation.remarks,
+        new: remarks
+      };
+    }
+
+    await AllocationHistory.create([{
+      allocationId,
+      version: newVersion,
+      changeType: 'updated',
+      snapshot: {
+        department: allocation.department,
+        budgetHead: allocation.budgetHead,
+        allocatedAmount: allocatedAmount !== undefined ? parseFloat(allocatedAmount) : allocation.allocatedAmount,
+        spentAmount: allocation.spentAmount,
+        financialYear: allocation.financialYear,
+        remarks: remarks !== undefined ? remarks : allocation.remarks
+      },
+      changes,
+      changeReason: changeReason || 'Allocation updated',
+      changedBy: req.user._id
+    }], { session });
+
+    // Update allocation
     const updateData = {};
     if (allocatedAmount !== undefined) updateData.allocatedAmount = parseFloat(allocatedAmount);
     if (remarks !== undefined) updateData.remarks = remarks;
-    const previousValues = allocation.toObject();
+    updateData.lastModifiedBy = req.user._id;
 
     const updatedAllocation = await Allocation.findByIdAndUpdate(
       allocationId,
@@ -262,7 +457,10 @@ const updateAllocation = async (req, res) => {
       req,
       targetEntity: 'Allocation',
       targetId: allocationId,
-      details: { updatedFields: Object.keys(updateData) },
+      details: {
+        updatedFields: Object.keys(updateData),
+        version: newVersion
+      },
       previousValues,
       newValues: updatedAllocation
     });
@@ -272,7 +470,10 @@ const updateAllocation = async (req, res) => {
     res.json({
       success: true,
       message: 'Allocation updated successfully',
-      data: { allocation: updatedAllocation }
+      data: {
+        allocation: updatedAllocation,
+        version: newVersion
+      }
     });
   } catch (error) {
     await session.abortTransaction();
@@ -335,10 +536,17 @@ const deleteAllocation = async (req, res) => {
 // @access  Private/Office
 const getAllocationStats = async (req, res) => {
   try {
-    const { financialYear } = req.query;
+    const { financialYear, department } = req.query;
 
     const query = {};
     if (financialYear) query.financialYear = financialYear;
+
+    // RBAC: Enforce department filter
+    if (req.user.role === 'department' || req.user.role === 'hod') {
+      query.department = req.user.department;
+    } else if (department) {
+      query.department = department;
+    }
 
     const stats = await Allocation.aggregate([
       { $match: query },
@@ -393,16 +601,20 @@ const getAllocationStats = async (req, res) => {
       totalAllocations: 0
     };
 
-    result.remaining = result.totalAllocated - result.totalSpent;
+    result.totalRemaining = result.totalAllocated - result.totalSpent;
     result.utilizationPercentage = result.totalAllocated > 0
-      ? (result.totalSpent / result.totalAllocated) * 100
+      ? Math.round((result.totalSpent / result.totalAllocated) * 100)
       : 0;
+
+    // Get available financial years
+    const financialYears = await Allocation.distinct('financialYear');
 
     res.json({
       success: true,
       data: {
         summary: result,
-        departmentBreakdown: departmentStats
+        departmentBreakdown: departmentStats,
+        financialYears: financialYears.sort().reverse()
       }
     });
   } catch (error) {
@@ -544,7 +756,7 @@ const getYearComparison = async (req, res) => {
       .populate('budgetHead', 'name category');
 
     const prevExpenditures = await Expenditure.find({
-      billDate: { $gte: prevDates.startDate, $lte: prevDates.endDate }
+      eventDate: { $gte: prevDates.startDate, $lte: prevDates.endDate }
     });
 
     // Get current year data
@@ -554,13 +766,13 @@ const getYearComparison = async (req, res) => {
       .populate('budgetHead', 'name category');
 
     const currentExpenditures = await Expenditure.find({
-      billDate: { $gte: currentDates.startDate, $lte: currentDates.endDate }
+      eventDate: { $gte: currentDates.startDate, $lte: currentDates.endDate }
     });
 
     // Helper to calculate totals
     const calcTotals = (allocs, exps) => {
       const allocated = allocs.reduce((sum, a) => sum + a.allocatedAmount, 0);
-      const spent = exps.reduce((sum, e) => sum + e.billAmount, 0);
+      const spent = exps.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
       const utilization = allocated > 0 ? Math.round((spent / allocated) * 100) : 0;
       return { allocated, spent, utilization };
     };

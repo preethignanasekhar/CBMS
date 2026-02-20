@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { allocationAPI } from '../services/api';
-import './BulkUpload.css';
+import './BulkUpload.scss';
 
 const BulkUpload = () => {
   const [loading, setLoading] = useState(false);

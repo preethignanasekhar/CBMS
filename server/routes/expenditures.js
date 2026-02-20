@@ -13,6 +13,7 @@ const {
 } = require('../controllers/expenditureController');
 const { verifyToken, authorize } = require('../middleware/auth');
 const { handleFileUpload } = require('../middleware/fileUpload');
+const { validateAttachments, validateAttachmentsForApproval } = require('../middleware/attachmentValidator');
 
 // All routes require authentication
 router.use(verifyToken);
@@ -34,6 +35,7 @@ router.post('/',
   authorize('department'),
   handleFileUpload,
   attachFilesToBody,
+  validateAttachments,
   submitExpenditure
 );
 
@@ -45,12 +47,13 @@ router.post('/:id/resubmit',
   resubmitExpenditure
 );
 
-// Verify expenditure (HOD only)
-router.put('/:id/verify', authorize('hod'), verifyExpenditure);
+// Verify expenditure (HOD, Office, Principal, Vice Principal)
+router.put('/:id/verify', authorize('hod', 'office', 'principal', 'vice_principal'), verifyExpenditure);
 
-// Approve expenditure (Vice Principal, Principal)
+// Approve expenditure (Office, Vice Principal, Principal)
 router.put('/:id/approve',
-  authorize('vice_principal', 'principal'),
+  authorize('office', 'vice_principal', 'principal'),
+  validateAttachmentsForApproval,
   approveExpenditure
 );
 

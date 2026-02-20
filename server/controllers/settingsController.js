@@ -1,5 +1,5 @@
 const Settings = require('../models/Settings');
-const AuditLog = require('../models/AuditLog');
+const { recordAuditLog } = require('../utils/auditService');
 
 // @desc    Get all settings
 // @route   GET /api/settings
@@ -66,15 +66,14 @@ const updateSettings = async (req, res) => {
 
             // Log only if changed
             if (JSON.stringify(previousValue) !== JSON.stringify(value)) {
-                await AuditLog.create([{
+                await recordAuditLog({
                     eventType: 'settings_updated',
-                    actor: req.user._id,
-                    actorRole: req.user.role,
+                    req,
                     targetEntity: 'System',
                     details: { key, value },
                     previousValues: { [key]: previousValue },
                     newValues: { [key]: value }
-                }], { session });
+                });
             }
         }
 

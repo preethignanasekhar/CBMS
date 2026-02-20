@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { allocationAPI, expenditureAPI, departmentsAPI, reportAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
 import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
-import './ConsolidatedDashboard.css';
+import './ConsolidatedDashboard.scss';
 
 const ConsolidatedDashboard = () => {
   const { user } = useAuth();
@@ -17,22 +18,40 @@ const ConsolidatedDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState('');
-  
+
   const currentFY = getCurrentFinancialYear();
   const previousFY = getPreviousFinancialYear();
   // Simple logic to get a year before previous for the dropdown
   const getFYMinus2 = () => {
-      const [start] = previousFY.split('-');
-      const year = parseInt(start) - 1;
-      return `${year}-${year + 1}`;
+    const [start] = previousFY.split('-');
+    const year = parseInt(start) - 1;
+    return `${year}-${year + 1}`;
   };
   const fyMinus2 = getFYMinus2();
 
   const [selectedFinancialYear, setSelectedFinancialYear] = useState(currentFY);
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     fetchData();
   }, [selectedDepartment, selectedFinancialYear]);
+
+  // Real-time updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotification = (data) => {
+      console.log('Real-time consolidated update received:', data);
+      fetchData(); // Refresh data on new notification
+    };
+
+    socket.on('notification', handleNotification);
+
+    return () => {
+      socket.off('notification', handleNotification);
+    };
+  }, [socket, selectedDepartment, selectedFinancialYear]);
 
   const fetchData = async () => {
     try {
@@ -105,8 +124,12 @@ const ConsolidatedDashboard = () => {
 
   // Calculate department-wise statistics
   const departmentStats = departments.map(dept => {
-    const deptAllocations = allocations.filter(allocation => allocation.departmentId === dept._id);
-    const deptExpenditures = expenditures.filter(expenditure => expenditure.departmentId === dept._id);
+    const deptAllocations = allocations.filter(allocation =>
+      (allocation.department?._id || allocation.department) === dept._id
+    );
+    const deptExpenditures = expenditures.filter(expenditure =>
+      (expenditure.department?._id || expenditure.department) === dept._id
+    );
 
     const totalAllocated = deptAllocations.reduce((sum, allocation) => sum + allocation.allocatedAmount, 0);
     const totalSpent = deptAllocations.reduce((sum, allocation) => sum + allocation.spentAmount, 0);
@@ -322,7 +345,7 @@ const ConsolidatedDashboard = () => {
 
       <div className="dashboard-content">
         <div className="department-breakdown">
-          <h2>Department-wise Breakdown</h2>
+          <h2 style={{ color: 'black', marginBottom: '2rem', fontWeight: 700, fontSize: '1.5rem', textShadow: 'none' }}>Department-wise Breakdown</h2>
           <div className="department-cards">
             {departmentStats.map((dept) => (
               <div
@@ -387,10 +410,10 @@ const ConsolidatedDashboard = () => {
                 </div>
                 <div className="activity-content">
                   <div className="activity-title">
-                    {expenditure.billNumber} - {expenditure.departmentName}
+                    {expenditure.billNumber} - {expenditure.department?.name || expenditure.departmentName || 'N/A'}
                   </div>
                   <div className="activity-details">
-                    {expenditure.budgetHeadName} • {expenditure.partyName}
+                    {expenditure.budgetHead?.name || expenditure.budgetHeadName || 'N/A'} • {expenditure.partyName}
                   </div>
                   <div className="activity-meta">
                     <span className="amount">{formatCurrency(expenditure.billAmount)}</span>

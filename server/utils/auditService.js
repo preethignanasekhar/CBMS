@@ -16,6 +16,8 @@ const recordAuditLog = async ({
     req,
     targetEntity,
     targetId,
+    actor = null,
+    actorRole = null,
     details = {},
     previousValues = null,
     newValues = null
@@ -23,15 +25,15 @@ const recordAuditLog = async ({
     try {
         await AuditLog.create({
             eventType,
-            actor: req.user._id,
-            actorRole: req.user.role,
+            actor: actor || (req?.user ? req.user._id : null),
+            actorRole: actorRole || (req?.user ? req.user.role : 'system'),
             targetEntity,
             targetId,
             details,
             previousValues,
             newValues,
-            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-            userAgent: req.headers['user-agent']
+            ipAddress: req?.ip || req?.headers?.['x-forwarded-for'] || req?.connection?.remoteAddress || '127.0.0.1',
+            userAgent: req?.headers?.['user-agent'] || 'system'
         });
     } catch (error) {
         console.error('Error recording audit log:', error);

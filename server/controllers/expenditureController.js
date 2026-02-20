@@ -49,8 +49,8 @@ const getExpenditures = async (req, res) => {
         query.status = 'pending';
         query.department = req.user.department;
       } else if (req.user.role === 'office') {
-        // Office can see 'pending' to verify, and 'verified' to approve
-        query.status = { $in: ['pending', 'verified'] };
+        // Office is the final step: Sanctioning Management-approved expenditures
+        query.status = 'approved';
       } else if (req.user.role === 'vice_principal' || req.user.role === 'principal') {
         query.status = 'verified'; // Prin/VP approve what HOD/Office verified
       }
@@ -70,9 +70,10 @@ const getExpenditures = async (req, res) => {
     if (submittedBy) query.submittedBy = submittedBy;
     if (search) {
       query.$or = [
-        { billNumber: { $regex: search, $options: 'i' } },
-        { partyName: { $regex: search, $options: 'i' } },
-        { expenseDetails: { $regex: search, $options: 'i' } }
+        { eventName: { $regex: search, $options: 'i' } },
+        { 'expenseItems.billNumber': { $regex: search, $options: 'i' } },
+        { 'expenseItems.vendorName': { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -147,7 +148,7 @@ const getExpenditureById = async (req, res) => {
   }
 };
 
-// @desc    Submit new expenditure
+// @desc    Submit new event-based expenditure
 // @route   POST /api/expenditures
 // @access  Private/Department
 const submitExpenditure = async (req, res) => {
@@ -155,79 +156,98 @@ const submitExpenditure = async (req, res) => {
   session.startTransaction();
 
   try {
-    const {
+    let {
       budgetHead,
-      billNumber,
-      billDate,
-      billAmount,
-      partyName,
-      expenseDetails,
-      referenceBudgetRegisterNo,
-      attachments
+      eventName,
+      eventType,
+      eventDate,
+      description,
+      expenseItems
     } = req.body;
 
-    // Validate required fields
-    if (!budgetHead || !billNumber || !billDate || !billAmount || !partyName || !expenseDetails) {
-      return res.status(400).json({
-        success: false,
-        message: 'All required fields must be provided'
+    // Handle JSON string if sent via FormData
+    if (typeof expenseItems === 'string') {
+      try {
+        expenseItems = JSON.parse(expenseItems);
+      } catch (e) {
+        console.error('Error parsing expenseItems JSON:', e);
+      }
+    }
+
+    // Map uploaded files to expense items if metadata exists
+    if (req.uploadedFiles && req.uploadedFiles.length > 0 && Array.isArray(expenseItems)) {
+      let fileIdx = 0;
+      expenseItems.forEach(item => {
+        item.attachments = item.attachments || [];
+        const count = item.fileCount || 0;
+        for (let i = 0; i < count; i++) {
+          if (req.uploadedFiles[fileIdx]) {
+            item.attachments.push(req.uploadedFiles[fileIdx]);
+            fileIdx++;
+          }
+        }
       });
     }
 
-    // Get current financial year based on bill date
-    const billDateObj = new Date(billDate);
-    const year = billDateObj.getFullYear();
-    const month = billDateObj.getMonth() + 1;
+    // Validate required fields
+    if (!budgetHead || !eventName || !eventType || !eventDate || !expenseItems || !Array.isArray(expenseItems) || expenseItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'All required fields must be provided, including at least one expense item'
+      });
+    }
+
+    // Calculate total amount
+    const totalAmount = expenseItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+
+    // Get current financial year based on event date
+    const eventDateObj = new Date(eventDate);
+    const year = eventDateObj.getFullYear();
+    const month = eventDateObj.getMonth() + 1;
     const financialYear = month >= 4 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 
-    // Check if allocation exists for this department and budget head
+    // Check if allocation exists
     const allocation = await Allocation.findOne({
       department: req.user.department,
       budgetHead,
       financialYear
     }).session(session);
 
-    // Check if bill amount exceeds remaining budget
-    const remainingAmount = allocation.allocatedAmount - allocation.spentAmount;
-    const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
-
-    if (parseFloat(billAmount) > remainingAmount) {
-      if (overspendPolicy === 'disallow') {
-        await session.abortTransaction();
-        return res.status(400).json({
-          success: false,
-          message: `Bill amount (₹${parseFloat(billAmount).toLocaleString()}) exceeds remaining budget (₹${remainingAmount.toLocaleString()})`,
-          remainingBudget: remainingAmount
-        });
-      }
-      // If policy is 'warn' or 'allow', we proceed but can flag it if needed
-    }
-
-    // Check if bill number already exists for this department
-    const existingBill = await Expenditure.findOne({
-      department: req.user.department,
-      billNumber,
-      financialYear
-    }).session(session);
-
-    if (existingBill) {
+    if (!allocation) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'Bill number already exists for this department in the current financial year'
+        message: 'No budget has been allocated for this budget head'
+      });
+    }
+
+    // Overspend check
+    const remainingAmount = allocation.allocatedAmount - allocation.spentAmount;
+    const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
+
+    if (totalAmount > remainingAmount && overspendPolicy === 'disallow') {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Total event amount (₹${totalAmount.toLocaleString()}) exceeds remaining budget (₹${remainingAmount.toLocaleString()})`,
+        remainingBudget: remainingAmount
       });
     }
 
     const expenditure = await Expenditure.create([{
       department: req.user.department,
       budgetHead,
-      billNumber,
-      billDate: billDateObj,
-      billAmount: parseFloat(billAmount),
-      partyName,
-      expenseDetails,
-      attachments: attachments || [],
-      referenceBudgetRegisterNo,
+      eventName,
+      eventType,
+      eventDate: eventDateObj,
+      description,
+      expenseItems: expenseItems.map(item => ({
+        ...item,
+        category: item.category || 'MISCELLANEOUS',
+        amount: Number(item.amount) || 0,
+        billDate: item.billDate ? new Date(item.billDate) : new Date()
+      })),
+      totalAmount,
       submittedBy: req.user._id,
       financialYear,
       status: 'pending'
@@ -242,9 +262,8 @@ const submitExpenditure = async (req, res) => {
       targetEntity: 'Expenditure',
       targetId: expenditure[0]._id,
       details: {
-        billNumber,
-        billAmount: parseFloat(billAmount),
-        partyName,
+        eventName,
+        totalAmount,
         department: req.user.department
       },
       newValues: expenditure[0]
@@ -255,17 +274,29 @@ const submitExpenditure = async (req, res) => {
       .populate('budgetHead', 'name category')
       .populate('submittedBy', 'name email');
 
-    // Send notifications
     await notifyExpenditureSubmission(populatedExpenditure);
 
     res.status(201).json({
       success: true,
-      message: 'Expenditure submitted successfully',
+      message: 'Event expenditure submitted successfully',
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    await session.abortTransaction();
+    if (session.transaction.state !== 'TRANSACTION_ABORTED') {
+      await session.abortTransaction();
+    }
     console.error('Submit expenditure error:', error);
+
+    // Provide detailed error for validation failures
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed: ' + messages.join(', '),
+        errors: error.errors
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error while submitting expenditure',
@@ -297,25 +328,23 @@ const approveExpenditure = async (req, res) => {
     }
 
     // Check if expenditure is in pending or verified status
-    // Office can approve verified items
-    // Prin/VP can approve verified items
-    // Office can ALSO approve pending items if they act as first-level?
-    // Requirement says: Pending -> Verified -> Approved
-    if (!['pending', 'verified'].includes(expenditure.status)) {
+    // Department -> HOD (Verify) -> Principal (Approve) -> Office (Finalize)
+    // Principal/VP can ONLY approve VERIFIED items (HOD verification is mandatory)
+    if (expenditure.status !== 'verified') {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'Expenditure is not in a state that can be approved'
+        message: 'Expenditure must be verified by HOD before Management approval'
       });
     }
 
-    // Role check for approval
-    const allowedApprovalRoles = ['office', 'vice_principal', 'principal'];
+    // Role check for approval - ONLY Management (Principal/VP)
+    const allowedApprovalRoles = ['vice_principal', 'principal'];
     if (!allowedApprovalRoles.includes(req.user.role)) {
       await session.abortTransaction();
       return res.status(403).json({
         success: false,
-        message: 'You are not authorized to approve expenditures'
+        message: 'Only Principal or Vice Principal can approve expenditures'
       });
     }
 
@@ -338,7 +367,7 @@ const approveExpenditure = async (req, res) => {
     const remainingAmount = allocation.allocatedAmount - allocation.spentAmount;
     const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
 
-    if (expenditure.billAmount > remainingAmount && overspendPolicy === 'disallow') {
+    if (expenditure.totalAmount > remainingAmount && overspendPolicy === 'disallow') {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -351,7 +380,7 @@ const approveExpenditure = async (req, res) => {
 
     // Role-based logic for approval
     let newStatus = 'approved';
-    const amount = expenditure.billAmount;
+    const amount = expenditure.totalAmount;
 
     // Vice Principal threshold check (₹50,000)
     if (req.user.role === 'vice_principal') {
@@ -382,56 +411,44 @@ const approveExpenditure = async (req, res) => {
 
     await expenditure.save({ session });
 
-    // Update allocation spent amount atomically
-    // We re-check the condition using a query for row-level locking behavior in Mongoose/MongoDB
-    const updateResult = await Allocation.findOneAndUpdate(
-      {
-        _id: allocation._id,
-        // If policy is disallow, ensure we don't exceed budget in this atomic step
-        ...(overspendPolicy === 'disallow' ? {
-          $expr: { $lte: [{ $add: ['$spentAmount', expenditure.billAmount] }, '$allocatedAmount'] }
-        } : {})
-      },
-      { $inc: { spentAmount: expenditure.billAmount } },
-      { session, new: true }
-    );
-
-    if (!updateResult) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: 'Budget exceeded during concurrent approval attempt or allocation not found.'
-      });
-    }
-
-    const newSpentAmount = updateResult.spentAmount;
+    // REMOVED: Incrementing spentAmount here. 
+    // Logic: Budget calculation happens at 'Finalized' (Office Sanction) stage
+    // to comply with mandatory project rule.
 
     await session.commitTransaction();
+    let transactionCommitted = true;
 
     // Send notifications
-    await notifyExpenditureApproval(populatedExpenditure, req.user);
+    try {
+      await notifyExpenditureApproval(populatedExpenditure, req.user);
 
-    // Check for budget exhaustion and notify if > 90%
-    const updatedAllocation = await Allocation.findById(allocation._id).populate('department budgetHead');
-    if (updatedAllocation) {
-      await notifyBudgetExhaustion(updatedAllocation);
+      // Check for budget exhaustion and notify if > 90%
+      const updatedAllocation = await Allocation.findById(allocation._id).populate('department budgetHead');
+      if (updatedAllocation) {
+        await notifyBudgetExhaustion(updatedAllocation);
+      }
+    } catch (notifyError) {
+      console.error('Notification error (non-fatal):', notifyError);
     }
 
     // Log the approval
-    await recordAuditLog({
-      eventType: 'expenditure_approved',
-      req,
-      targetEntity: 'Expenditure',
-      targetId: expenditureId,
-      details: {
-        billNumber: expenditure.billNumber,
-        billAmount: expenditure.billAmount,
-        remarks,
-        newSpentAmount
-      },
-      previousValues: previousState,
-      newValues: populatedExpenditure
-    });
+    try {
+      await recordAuditLog({
+        eventType: 'expenditure_approved',
+        req,
+        targetEntity: 'Expenditure',
+        targetId: expenditureId,
+        details: {
+          eventName: expenditure.eventName,
+          totalAmount: expenditure.totalAmount,
+          remarks
+        },
+        previousValues: previousState,
+        newValues: populatedExpenditure
+      });
+    } catch (auditError) {
+      console.error('Audit log error (non-fatal):', auditError);
+    }
 
     res.json({
       success: true,
@@ -439,7 +456,9 @@ const approveExpenditure = async (req, res) => {
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    await session.abortTransaction();
+    if (session.transaction.isActive && !session.transaction.isCommitted) {
+      await session.abortTransaction();
+    }
     console.error('Approve expenditure error:', error);
     res.status(500).json({
       success: false,
@@ -505,7 +524,7 @@ const rejectExpenditure = async (req, res) => {
       req,
       targetEntity: 'Expenditure',
       targetId: expenditureId,
-      details: { remarks },
+      details: { eventName: expenditure.eventName, totalAmount: expenditure.totalAmount, remarks },
       previousValues: previousState,
       newValues: expenditure
     });
@@ -590,21 +609,62 @@ const finalizeExpenditure = async (req, res) => {
 
     await expenditure.save({ session });
 
+    // NEW: Update allocation spent amount atomically during finalization (Office Sanction)
+    const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
+    const updateResult = await Allocation.findOneAndUpdate(
+      {
+        _id: allocation._id,
+        // If policy is disallow, ensure we don't exceed budget in this atomic step
+        ...(overspendPolicy === 'disallow' ? {
+          $expr: { $lte: [{ $add: ['$spentAmount', expenditure.totalAmount] }, '$allocatedAmount'] }
+        } : {})
+      },
+      { $inc: { spentAmount: expenditure.totalAmount } },
+      { session, new: true }
+    );
+
+    if (!updateResult) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Budget exceeded during finalization attempt or allocation not found.'
+      });
+    }
+
     await session.commitTransaction();
+    let transactionCommitted = true;
+
+    // REAL-TIME UPDATE: Notify all clients to update their dashboards
+    try {
+      broadcast('dashboard_update', {
+        type: 'expenditure_finalized',
+        department: expenditure.department,
+        amount: expenditure.totalAmount,
+        timestamp: new Date()
+      });
+    } catch (socketError) {
+      console.error('Socket broadcast error (non-fatal):', socketError);
+    }
+
+
 
     // Log the finalization
-    await AuditLog.create({
-      eventType: 'expenditure_finalized',
-      actor: req.user._id,
-      actorRole: req.user.role,
-      targetEntity: 'Expenditure',
-      targetId: expenditureId,
-      details: {
-        billNumber: expenditure.billNumber,
-        billAmount: expenditure.billAmount,
-        remarks
-      }
-    });
+    try {
+      await AuditLog.create({
+        eventType: 'expenditure_finalized',
+        actor: req.user._id,
+        actorRole: req.user.role,
+        targetEntity: 'Expenditure',
+        targetId: expenditureId,
+        details: {
+          eventName: expenditure.eventName,
+          totalAmount: expenditure.totalAmount,
+          remarks
+        }
+      });
+    } catch (auditError) {
+      console.error('Audit log error (non-fatal):', auditError);
+    }
 
     const populatedExpenditure = await Expenditure.findById(expenditureId)
       .populate('department', 'name code')
@@ -618,7 +678,9 @@ const finalizeExpenditure = async (req, res) => {
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    await session.abortTransaction();
+    if (session.transaction.isActive && !session.transaction.isCommitted) {
+      await session.abortTransaction();
+    }
     console.error('Finalize expenditure error:', error);
     res.status(500).json({
       success: false,
@@ -646,7 +708,15 @@ const verifyExpenditure = async (req, res) => {
       });
     }
 
-    // Check permissions
+    // Check permissions - HOD Only for Verification
+    const allowedVerifyRoles = ['hod'];
+    if (!allowedVerifyRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only HOD can verify expenditures'
+      });
+    }
+
     if (req.user.role === 'hod') {
       if (expenditure.department.toString() !== req.user.department.toString()) {
         return res.status(403).json({
@@ -654,14 +724,9 @@ const verifyExpenditure = async (req, res) => {
           message: 'You can only verify expenditures from your department'
         });
       }
-    } else if (req.user.role !== 'office') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only HOD or Office can verify expenditures'
-      });
     }
 
-    // Check if expenditure is in pending status
+    // Check if expenditure is in a state that can be verified
     if (expenditure.status !== 'pending') {
       return res.status(400).json({
         success: false,
@@ -689,8 +754,8 @@ const verifyExpenditure = async (req, res) => {
       targetEntity: 'Expenditure',
       targetId: expenditureId,
       details: {
-        billNumber: expenditure.billNumber,
-        billAmount: expenditure.billAmount,
+        eventName: expenditure.eventName,
+        totalAmount: expenditure.totalAmount,
         remarks
       }
     });
@@ -722,15 +787,37 @@ const verifyExpenditure = async (req, res) => {
 const resubmitExpenditure = async (req, res) => {
   try {
     const expenditureId = req.params.id;
-    const {
-      billNumber,
-      billDate,
-      billAmount,
-      partyName,
-      expenseDetails,
-      referenceBudgetRegisterNo,
-      attachments
+    let {
+      eventName,
+      eventType,
+      eventDate,
+      description,
+      expenseItems
     } = req.body;
+
+    // Handle JSON string if sent via FormData
+    if (typeof expenseItems === 'string') {
+      try {
+        expenseItems = JSON.parse(expenseItems);
+      } catch (e) {
+        console.error('Error parsing expenseItems JSON in resubmit:', e);
+      }
+    }
+
+    // Map uploaded files to expense items if metadata exists
+    if (req.uploadedFiles && req.uploadedFiles.length > 0 && Array.isArray(expenseItems)) {
+      let fileIdx = 0;
+      expenseItems.forEach(item => {
+        item.attachments = item.attachments || [];
+        const count = item.fileCount || 0;
+        for (let i = 0; i < count; i++) {
+          if (req.uploadedFiles[fileIdx]) {
+            item.attachments.push(req.uploadedFiles[fileIdx]);
+            fileIdx++;
+          }
+        }
+      });
+    }
 
     const originalExpenditure = await Expenditure.findById(expenditureId);
     if (!originalExpenditure) {
@@ -756,39 +843,59 @@ const resubmitExpenditure = async (req, res) => {
       });
     }
 
+    // Check 1: Cannot resubmit a record that is ALREADY a resubmission (Limit depth to 1)
+    if (originalExpenditure.isResubmission) {
+      return res.status(400).json({
+        success: false,
+        message: 'This expenditure was already a resubmission. Following the "One Time Resend" policy, you cannot resubmit it again.'
+      });
+    }
+
+    // Check 2: Check if this specific record has already been resubmitted
+    const existingResubmission = await Expenditure.findOne({ originalExpenditureId: expenditureId });
+    if (existingResubmission) {
+      return res.status(400).json({
+        success: false,
+        message: 'This expenditure has already been resubmitted once. Multiple resubmissions are not allowed.'
+      });
+    }
+
     // Create new expenditure based on original
-    const newExpenditure = await Expenditure.create({
+    const newExpenditure = await Expenditure.create([{
       department: originalExpenditure.department,
       budgetHead: originalExpenditure.budgetHead,
-      billNumber: billNumber || originalExpenditure.billNumber,
-      billDate: billDate ? new Date(billDate) : originalExpenditure.billDate,
-      billAmount: billAmount ? parseFloat(billAmount) : originalExpenditure.billAmount,
-      partyName: partyName || originalExpenditure.partyName,
-      expenseDetails: expenseDetails || originalExpenditure.expenseDetails,
-      attachments: attachments || originalExpenditure.attachments,
-      referenceBudgetRegisterNo: referenceBudgetRegisterNo || originalExpenditure.referenceBudgetRegisterNo,
+      eventName: eventName || originalExpenditure.eventName,
+      eventType: eventType || originalExpenditure.eventType,
+      eventDate: eventDateObj,
+      description: description || originalExpenditure.description,
+      expenseItems: expenseItems.map(item => ({
+        ...item,
+        category: item.category || 'MISCELLANEOUS',
+        amount: Number(item.amount) || 0,
+        billDate: item.billDate ? new Date(item.billDate) : new Date()
+      })),
       submittedBy: req.user._id,
       financialYear: originalExpenditure.financialYear,
       status: 'pending',
       isResubmission: true,
       originalExpenditureId: expenditureId
-    });
+    }]);
 
     // Log the resubmission
-    await AuditLog.create({
+    await recordAuditLog({
       eventType: 'expenditure_resubmitted',
-      actor: req.user._id,
-      actorRole: req.user.role,
+      req,
       targetEntity: 'Expenditure',
-      targetId: newExpenditure._id,
+      targetId: newExpenditure[0]._id,
       details: {
         originalExpenditureId: expenditureId,
-        billNumber: newExpenditure.billNumber,
-        billAmount: newExpenditure.billAmount
-      }
+        eventName: newExpenditure[0].eventName,
+        totalAmount: newExpenditure[0].totalAmount
+      },
+      newValues: newExpenditure[0]
     });
 
-    const populatedExpenditure = await Expenditure.findById(newExpenditure._id)
+    const populatedExpenditure = await Expenditure.findById(newExpenditure[0]._id)
       .populate('department', 'name code')
       .populate('budgetHead', 'name category')
       .populate('submittedBy', 'name email');
@@ -800,6 +907,17 @@ const resubmitExpenditure = async (req, res) => {
     });
   } catch (error) {
     console.error('Resubmit expenditure error:', error);
+
+    // Provide detailed error for validation failures
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed: ' + messages.join(', '),
+        errors: error.errors
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error while resubmitting expenditure',
@@ -830,7 +948,7 @@ const getExpenditureStats = async (req, res) => {
         $group: {
           _id: '$status',
           count: { $sum: 1 },
-          totalAmount: { $sum: '$billAmount' }
+          totalAmount: { $sum: '$totalAmount' }
         }
       }
     ]);
@@ -841,15 +959,15 @@ const getExpenditureStats = async (req, res) => {
         $group: {
           _id: null,
           totalExpenditures: { $sum: 1 },
-          totalAmount: { $sum: '$billAmount' },
+          totalAmount: { $sum: '$totalAmount' },
           pendingAmount: {
             $sum: {
-              $cond: [{ $eq: ['$status', 'pending'] }, '$billAmount', 0]
+              $cond: [{ $eq: ['$status', 'pending'] }, '$totalAmount', 0]
             }
           },
           approvedAmount: {
             $sum: {
-              $cond: [{ $eq: ['$status', 'approved'] }, '$billAmount', 0]
+              $cond: [{ $eq: ['$status', 'approved'] }, '$totalAmount', 0]
             }
           }
         }

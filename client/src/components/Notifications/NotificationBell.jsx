@@ -4,7 +4,7 @@ import { useSocket } from '../../context/SocketContext';
 import { notificationAPI } from '../../services/api';
 import Tooltip from '../Tooltip/Tooltip';
 import { Bell, FileText, CheckCircle, XCircle, DollarSign, AlertTriangle, Clock, Megaphone, Trash2 } from 'lucide-react';
-import './NotificationBell.css';
+import './NotificationBell.scss';
 
 const NotificationBell = () => {
   const { user } = useAuth();
@@ -121,7 +121,10 @@ const NotificationBell = () => {
       budget_allocation_created: <DollarSign />,
       budget_exhaustion_warning: <AlertTriangle />,
       approval_reminder: <Clock />,
-      system_announcement: <Megaphone />
+      system_announcement: <Megaphone />,
+      proposal_submitted: <FileText />,
+      proposal_verified: <CheckCircle />,
+      proposal_rejected: <XCircle />
     };
     return icons[type] || <FileText />;
   };

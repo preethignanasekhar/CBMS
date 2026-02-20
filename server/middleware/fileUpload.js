@@ -40,7 +40,7 @@ if (!fs.existsSync(uploadDir)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Create department-specific folder
-    const departmentId = req.body.departmentId || req.user?.department || 'general';
+    const departmentId = String(req.body.departmentId || req.user?.department || 'general');
     const deptDir = path.join(uploadDir, departmentId);
 
     if (!fs.existsSync(deptDir)) {
@@ -177,7 +177,7 @@ const handleFileUpload = (req, res, next) => {
         mimetype: file.mimetype,
         size: file.size,
         path: file.path,
-        url: `/uploads/${req.body.departmentId || req.user?.department || 'general'}/${file.filename}`
+        url: `/uploads/${String(req.body.departmentId || req.user?.department || 'general')}/${file.filename}`
       }));
     }
 

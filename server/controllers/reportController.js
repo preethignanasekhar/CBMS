@@ -4,6 +4,7 @@ const Department = require('../models/Department');
 const BudgetHead = require('../models/BudgetHead');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const BudgetProposal = require('../models/BudgetProposal');
 
 // @desc    Get expenditure report
 // @route   GET /api/reports/expenditures
@@ -24,7 +25,7 @@ const getExpenditureReport = async (req, res) => {
     const query = {};
 
     if (startDate && endDate) {
-      query.billDate = {
+      query.eventDate = {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       };
@@ -48,12 +49,12 @@ const getExpenditureReport = async (req, res) => {
       .populate('budgetHead', 'name category')
       .populate('submittedBy', 'name email')
       .populate('approvalSteps.approver', 'name email role')
-      .sort({ billDate: -1 });
+      .sort({ createdAt: -1 });
 
     // Calculate summary statistics
     const summary = {
       totalExpenditures: expenditures.length,
-      totalAmount: expenditures.reduce((sum, exp) => sum + exp.billAmount, 0),
+      totalAmount: expenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
       byStatus: {},
       byDepartment: {},
       byBudgetHead: {},
@@ -61,28 +62,30 @@ const getExpenditureReport = async (req, res) => {
     };
 
     expenditures.forEach(exp => {
+      const amount = exp.totalAmount || 0;
       // By status
-      summary.byStatus[exp.status] = (summary.byStatus[exp.status] || 0) + exp.billAmount;
+      summary.byStatus[exp.status] = (summary.byStatus[exp.status] || 0) + amount;
 
       // By department
-      const deptName = exp.department.name;
+      const deptName = exp.department?.name || 'Unknown';
       if (!summary.byDepartment[deptName]) {
         summary.byDepartment[deptName] = { count: 0, amount: 0 };
       }
       summary.byDepartment[deptName].count++;
-      summary.byDepartment[deptName].amount += exp.billAmount;
+      summary.byDepartment[deptName].amount += amount;
 
       // By budget head
-      const headName = exp.budgetHead.name;
+      const headName = exp.budgetHead?.name || 'Unknown';
       if (!summary.byBudgetHead[headName]) {
         summary.byBudgetHead[headName] = { count: 0, amount: 0 };
       }
       summary.byBudgetHead[headName].count++;
-      summary.byBudgetHead[headName].amount += exp.billAmount;
+      summary.byBudgetHead[headName].amount += amount;
 
       // By month
-      const month = exp.billDate.toISOString().substring(0, 7);
-      summary.byMonth[month] = (summary.byMonth[month] || 0) + exp.billAmount;
+      const date = exp.eventDate || exp.createdAt;
+      const month = date ? new Date(date).toISOString().substring(0, 7) : 'Unknown';
+      summary.byMonth[month] = (summary.byMonth[month] || 0) + amount;
     });
 
     if (format === 'csv') {
@@ -254,8 +257,19 @@ const getDashboardReport = async (req, res) => {
     // Get current financial year if not specified
     const currentFY = financialYear || getCurrentFinancialYear();
 
+    // Build department filter based on role or query
+    const deptFilter = {};
+    if (req.user.role === 'department' || req.user.role === 'hod') {
+      deptFilter.department = req.user.department;
+    } else if (req.query.department) {
+      deptFilter.department = req.query.department;
+    }
+
     // Get allocations for the financial year
-    const allocations = await Allocation.find({ financialYear: currentFY })
+    const allocations = await Allocation.find({
+      financialYear: currentFY,
+      ...deptFilter
+    })
       .populate('department', 'name code')
       .populate('budgetHead', 'name category');
 
@@ -275,41 +289,93 @@ const getDashboardReport = async (req, res) => {
     const endDate = new Date(endYear, 2, 31, 23, 59, 59); // March 31st end of day
 
     const expenditures = await Expenditure.find({
-      billDate: { $gte: startDate, $lte: endDate }
+      eventDate: { $gte: startDate, $lte: endDate },
+      ...deptFilter
     })
       .populate('department', 'name code')
       .populate('budgetHead', 'name category');
 
+    // Get Budget Proposals for the financial year (for "Requested Amount")
+    const proposals = await BudgetProposal.find({
+      financialYear: currentFY,
+      ...deptFilter
+    });
+
     // Calculate consolidated statistics
     const consolidated = {
       financialYear: currentFY,
+      // 1. Requested Amount (sum of all pending + approved event requests)
+      totalRequested: expenditures
+        .filter(exp => ['pending', 'verified', 'approved'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // 2. Approved Budget (Total allocations for the department)
       totalAllocated: allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0),
-      totalSpent: expenditures.reduce((sum, exp) => sum + exp.billAmount, 0),
+
+      // 3. Utilized Amount (Finalized Phase 2 events only)
+      totalUtilized: expenditures
+        .filter(exp => exp.status === 'finalized')
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // 4. Pending Amount (events under verification/approval - NOT deducted)
       totalPending: expenditures
-        .filter(exp => exp.status === 'pending')
-        .reduce((sum, exp) => sum + exp.billAmount, 0),
-      totalApproved: expenditures
-        .filter(exp => exp.status === 'approved')
-        .reduce((sum, exp) => sum + exp.billAmount, 0),
-      totalRejected: expenditures
-        .filter(exp => exp.status === 'rejected')
-        .reduce((sum, exp) => sum + exp.billAmount, 0),
-      utilizationPercentage: 0,
-      departmentBreakdown: {},
-      budgetHeadBreakdown: {},
-      monthlyTrend: {},
+        .filter(exp => ['pending', 'verified', 'approved'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // Legacy field for compatibility if needed elsewhere
+      remainingBalance: (allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0)) -
+        (expenditures.filter(exp => exp.status === 'finalized').reduce((sum, exp) => sum + (exp.totalAmount || 0), 0)),
+
+      // Support for status breakdown count
       statusBreakdown: {
         pending: 0,
         verified: 0,
         approved: 0,
+        finalized: 0,
         rejected: 0
       },
+
+      recentEvents: expenditures
+        .filter(exp => exp.status === 'finalized')
+        .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
+        .slice(0, 10)
+        .map(exp => ({
+          name: exp.eventName,
+          amount: exp.totalAmount,
+          date: exp.eventDate
+        })),
+
+      utilizationPercentage: 0,
+      departmentBreakdown: {},
+      budgetHeadBreakdown: {},
+      monthlyTrend: {},
+      dailyTotal: 0,
+      dailyDepartmentBreakdown: {},
       yearComparison: null
     };
 
+    consolidated.remainingBalance = consolidated.totalAllocated - consolidated.totalUtilized;
+
+    // Calculate daily metrics (for today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const dailyExpenditures = expenditures.filter(exp => {
+      const eventDate = new Date(exp.eventDate);
+      return eventDate >= today && eventDate < tomorrow && ['approved', 'finalized'].includes(exp.status);
+    });
+
+    consolidated.dailyTotal = dailyExpenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0);
+    dailyExpenditures.forEach(exp => {
+      const deptName = exp.department.name;
+      consolidated.dailyDepartmentBreakdown[deptName] = (consolidated.dailyDepartmentBreakdown[deptName] || 0) + (exp.totalAmount || 0);
+    });
+
     // Calculate utilization percentage
     if (consolidated.totalAllocated > 0) {
-      consolidated.utilizationPercentage = (consolidated.totalSpent / consolidated.totalAllocated) * 100;
+      consolidated.utilizationPercentage = (consolidated.totalUtilized / consolidated.totalAllocated) * 100;
     }
 
     // Department breakdown
@@ -362,11 +428,13 @@ const getDashboardReport = async (req, res) => {
       }
     });
 
-    // Monthly trend
-    expenditures.forEach(exp => {
-      const month = exp.billDate.toISOString().substring(0, 7);
-      consolidated.monthlyTrend[month] = (consolidated.monthlyTrend[month] || 0) + exp.billAmount;
-    });
+    // Monthly trend (Finalized only)
+    expenditures
+      .filter(exp => exp.status === 'finalized')
+      .forEach(exp => {
+        const month = (exp.eventDate || exp.createdAt).toISOString().substring(0, 7);
+        consolidated.monthlyTrend[month] = (consolidated.monthlyTrend[month] || 0) + (exp.totalAmount || 0);
+      });
 
     // Status breakdown
     expenditures.forEach(exp => {
@@ -463,6 +531,72 @@ const getAuditReport = async (req, res) => {
   }
 };
 
+// @desc    Get budget proposal report
+// @route   GET /api/reports/proposals
+// @access  Private
+const getBudgetProposalReport = async (req, res) => {
+  try {
+    const { financialYear, department, status } = req.query;
+
+    const query = {};
+    if (financialYear) query.financialYear = financialYear;
+    if (department) query.department = department;
+    if (status) query.status = status;
+
+    const proposals = await BudgetProposal.find(query)
+      .populate('department', 'name code')
+      .populate('proposalItems.budgetHead', 'name code category budgetType')
+      .populate('submittedBy', 'name email')
+      .populate('approvedBy', 'name email')
+      .sort({ financialYear: -1, department: 1 });
+
+    const summary = {
+      totalProposals: proposals.length,
+      totalProposedAmount: proposals.reduce((sum, p) => sum + p.totalProposedAmount, 0),
+      byStatus: {
+        draft: 0,
+        submitted: 0,
+        verified: 0,
+        approved: 0,
+        rejected: 0,
+        revised: 0
+      },
+      byDepartment: {}
+    };
+
+    proposals.forEach(p => {
+      summary.byStatus[p.status] = (summary.byStatus[p.status] || 0) + 1;
+
+      const deptName = p.department.name;
+      if (!summary.byDepartment[deptName]) {
+        summary.byDepartment[deptName] = {
+          count: 0,
+          amount: 0,
+          status: p.status
+        };
+      }
+      summary.byDepartment[deptName].count++;
+      summary.byDepartment[deptName].amount += p.totalProposedAmount;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        proposals,
+        summary,
+        filters: { financialYear, department, status }
+      }
+    });
+  } catch (error) {
+    console.error('Get budget proposal report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while generating budget proposal report',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // Helper functions
 const getCurrentFinancialYear = () => {
   const now = new Date();
@@ -487,7 +621,8 @@ const getYearComparisonData = async (previousFY, currentFY) => {
       .populate('budgetHead', 'name category');
 
     const prevExpenditures = await Expenditure.find({
-      billDate: { $gte: prevStartDate, $lte: prevEndDate }
+      eventDate: { $gte: prevStartDate, $lte: prevEndDate },
+      status: 'finalized'
     });
 
     // Get current year data (already fetched)
@@ -499,16 +634,17 @@ const getYearComparisonData = async (previousFY, currentFY) => {
       .populate('budgetHead', 'name category');
 
     const currentExpenditures = await Expenditure.find({
-      billDate: { $gte: currentStartDate, $lte: currentEndDate }
+      eventDate: { $gte: currentStartDate, $lte: currentEndDate },
+      status: 'finalized'
     });
 
     // Calculate comparison metrics
     const prevTotalAllocated = prevAllocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0);
-    const prevTotalSpent = prevExpenditures.reduce((sum, exp) => sum + exp.billAmount, 0);
+    const prevTotalSpent = prevExpenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0);
     const prevUtilization = prevTotalAllocated > 0 ? (prevTotalSpent / prevTotalAllocated) * 100 : 0;
 
     const currentTotalAllocated = currentAllocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0);
-    const currentTotalSpent = currentExpenditures.reduce((sum, exp) => sum + exp.billAmount, 0);
+    const currentTotalSpent = currentExpenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0);
     const currentUtilization = currentTotalAllocated > 0 ? (currentTotalSpent / currentTotalAllocated) * 100 : 0;
 
     // Calculate percentage changes
@@ -608,35 +744,43 @@ const getYearComparisonData = async (previousFY, currentFY) => {
 
 const generateExpenditureCSV = (expenditures) => {
   const headers = [
-    'Bill Number',
-    'Bill Date',
-    'Amount',
-    'Party Name',
+    'Event Name',
+    'Event Type',
+    'Event Date',
+    'Total Amount',
+    'Bill Number(s)',
+    'Vendor(s)',
     'Department',
     'Budget Head',
     'Status',
     'Submitted By',
-    'Expense Details',
-    'Attachments',
+    'Financial Year',
     'Created At'
   ];
 
-  const rows = expenditures.map(exp => [
-    exp.billNumber,
-    exp.billDate.toISOString().split('T')[0],
-    exp.billAmount,
-    exp.partyName,
-    exp.department.name,
-    exp.budgetHead.name,
-    exp.status,
-    exp.submittedBy.name,
-    exp.expenseDetails,
-    exp.attachments ? exp.attachments.map(a => a.url).join('; ') : '',
-    exp.createdAt.toISOString()
-  ]);
+  const rows = expenditures.map(exp => {
+    const billNumbers = exp.expenseItems?.map(item => item.billNumber).join('; ') || '';
+    const vendors = exp.expenseItems?.map(item => item.vendorName).join('; ') || '';
+    const date = exp.eventDate || exp.createdAt;
+
+    return [
+      exp.eventName || 'N/A',
+      exp.eventType || 'N/A',
+      date ? new Date(date).toISOString().split('T')[0] : 'N/A',
+      exp.totalAmount || 0,
+      billNumbers,
+      vendors,
+      exp.department?.name || 'N/A',
+      exp.budgetHead?.name || 'N/A',
+      exp.status || 'N/A',
+      exp.submittedBy?.name || 'N/A',
+      exp.financialYear || 'N/A',
+      exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
+    ];
+  });
 
   return [headers, ...rows].map(row =>
-    row.map(field => `"${field}"`).join(',')
+    row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')
   ).join('\n');
 };
 
@@ -702,5 +846,6 @@ module.exports = {
   getExpenditureReport,
   getAllocationReport,
   getDashboardReport,
-  getAuditReport
+  getAuditReport,
+  getBudgetProposalReport
 };

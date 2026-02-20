@@ -88,6 +88,11 @@ const createUser = async (req, res) => {
       permissions: permissions || {}
     });
 
+    // Sync with Department if role is HOD
+    if (role === 'hod' && department) {
+      await Department.findByIdAndUpdate(department, { hod: user._id });
+    }
+
     // Log the creation
     await recordAuditLog({
       eventType: 'user_created',
@@ -220,6 +225,18 @@ const updateUser = async (req, res) => {
       newValues: user
     });
 
+    // Sync with Department if role is HOD or was HOD
+    // 1. Clear HOD from old department if role changed or department changed
+    if (existingUser.role === 'hod' && existingUser.department) {
+      if (role !== 'hod' || (department && department.toString() !== existingUser.department.toString())) {
+        await Department.findByIdAndUpdate(existingUser.department, { hod: null });
+      }
+    }
+    // 2. Set HOD in new department if role is HOD
+    if (role === 'hod' && department) {
+      await Department.findByIdAndUpdate(department, { hod: user._id });
+    }
+
     res.json({
       success: true,
       message: 'User updated successfully',
@@ -267,6 +284,11 @@ const deleteUser = async (req, res) => {
       details: { name: user.name, email: user.email },
       previousValues: user
     });
+
+    // Sync with Department: Clear HOD if deleted user was an HOD
+    if (user.role === 'hod' && user.department) {
+      await Department.findByIdAndUpdate(user.department, { hod: null });
+    }
 
     res.json({
       success: true,

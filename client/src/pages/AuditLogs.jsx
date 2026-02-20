@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auditLogAPI } from '../services/api';
 import { Download, List, Users, LineChart, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
-import './AuditLogs.css';
+import './AuditLogs.scss';
 
 const AuditLogs = () => {
   const [auditLogs, setAuditLogs] = useState([]);

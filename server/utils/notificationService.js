@@ -65,6 +65,24 @@ const notificationTemplates = {
     message: 'Your expenditure request is missing required attachments. Please upload them to proceed.',
     priority: 'high',
     actionRequired: true
+  },
+  proposal_submitted: {
+    title: 'New Budget Proposal Submitted',
+    message: 'A new annual budget proposal has been submitted and requires your verification.',
+    priority: 'high',
+    actionRequired: true
+  },
+  proposal_verified: {
+    title: 'Budget Proposal Verified',
+    message: 'Your budget proposal has been verified by the HOD and forwarded for approval.',
+    priority: 'medium',
+    actionRequired: false
+  },
+  proposal_rejected: {
+    title: 'Budget Proposal Rejected',
+    message: 'Your budget proposal has been rejected. Please review the remarks and resubmit if needed.',
+    priority: 'high',
+    actionRequired: true
   }
 };
 
@@ -536,6 +554,59 @@ const sendApprovalReminders = async () => {
   }
 };
 
+// Send budget proposal submission notifications
+const notifyProposalSubmission = async (proposal) => {
+  try {
+    // Get HOD users in the same department
+    const hodUsers = await getUsersByRole(['hod']);
+
+    // Filter HODs for this department
+    const departmentHodUsers = hodUsers.filter(
+      user => user._id.toString() !== proposal.submittedBy.toString() // Don't notify the submittor if they are HOD
+    );
+
+    const recipients = departmentHodUsers.map(user => user._id);
+
+    if (recipients.length > 0) {
+      await sendBulkNotification(recipients, {
+        type: 'proposal_submitted',
+        relatedEntity: 'BudgetProposal',
+        relatedEntityId: proposal._id,
+        actionUrl: '/hod-dashboard',
+        metadata: {
+          financialYear: proposal.financialYear,
+          department: proposal.department.name,
+          amount: proposal.totalProposedAmount
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error sending proposal submission notifications:', error);
+  }
+};
+
+// Send budget proposal status change notifications
+const notifyProposalStatusChange = async (proposal, action, remarks) => {
+  try {
+    const type = action === 'verify' ? 'proposal_verified' : 'proposal_rejected';
+
+    await createNotification({
+      recipient: proposal.submittedBy,
+      type: type,
+      relatedEntity: 'BudgetProposal',
+      relatedEntityId: proposal._id,
+      actionUrl: '/budget-proposals',
+      metadata: {
+        financialYear: proposal.financialYear,
+        action,
+        remarks
+      }
+    });
+  } catch (error) {
+    console.error('Error sending proposal status change notifications:', error);
+  }
+};
+
 module.exports = {
   createNotification,
   sendEmailNotification,
@@ -545,5 +616,7 @@ module.exports = {
   notifyExpenditureApproval,
   notifyExpenditureRejection,
   notifyBudgetExhaustion,
-  sendApprovalReminders
+  sendApprovalReminders,
+  notifyProposalSubmission,
+  notifyProposalStatusChange
 };
