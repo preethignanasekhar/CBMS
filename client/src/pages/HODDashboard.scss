@@ -1,4 +1,4 @@
-@import '../styles/layout-utils';
+@use '../styles/layout-utils' as *;
 
 .stats-grid-4 {
   display: grid;

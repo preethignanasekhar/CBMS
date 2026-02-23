@@ -25,11 +25,11 @@ body {
 :root {
   /* ============ Color Palette ============ */
   /* Professional Navy & Slate Scale */
-  --primary: #0f172a;
+  --primary: #163e9c;
   /* Slate 900 */
-  --primary-hover: #1e293b;
+  --primary-hover: #1b4c9b;
   /* Slate 800 */
-  --primary-light: #f1f5f9;
+  --primary-light: #278ff7;
   /* Slate 100 */
   --primary-dark: #020617;
 
@@ -476,7 +476,7 @@ a:hover {
   color: var(--accent) !important;
 }
 
-@import './styles/layout-utils';
+
 
 /* ============================================
    Page Container

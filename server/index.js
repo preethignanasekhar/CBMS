@@ -2,8 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const path = require('path');
-require('dotenv').config();
+const dns = require('dns');
 
+// Fix for MongoDB Atlas ECONNREFUSED on querySrv
+// This forces Node.js to use reliable DNS resolvers for SRV lookups
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 // Import routes
 const authRoutes = require('./routes/auth');
 const notificationRoutes = require('./routes/notifications');

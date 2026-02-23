@@ -1,5 +1,10 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// Fix for ECONNREFUSED on querySrv for MongoDB Atlas
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
 
 const mongoUri = process.env.MONGODB_URI;
 
