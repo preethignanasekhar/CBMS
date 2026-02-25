@@ -38,6 +38,8 @@ const auditLogSchema = new mongoose.Schema({
       'budget_proposal_approved',
       'budget_proposal_rejected',
       'budget_proposal_deleted',
+      'budget_proposal_verified',
+      'budget_proposal_resubmitted',
       'password_reset',
       'income_created',
       'income_updated',

@@ -4,14 +4,12 @@ const budgetOverrideSchema = new mongoose.Schema({
     expenditure: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Expenditure',
-        required: [true, 'Expenditure reference is required'],
-        index: true
+        required: [true, 'Expenditure reference is required']
     },
     allocation: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Allocation',
-        required: [true, 'Allocation reference is required'],
-        index: true
+        required: [true, 'Allocation reference is required']
     },
     allocationAmount: {
         type: Number,
@@ -46,8 +44,7 @@ const budgetOverrideSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],
-        default: 'pending',
-        index: true
+        default: 'pending'
     },
     approvedBy: {
         type: mongoose.Schema.Types.ObjectId,

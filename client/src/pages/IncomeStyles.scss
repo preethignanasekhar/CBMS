@@ -303,6 +303,7 @@
         min-width: 900px;
     }
 }
+
 /* Income Form Styles */
 .income-form-container {
     padding: 2rem;
@@ -333,14 +334,14 @@
 .form-sections-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 2rem;
-    margin-bottom: 2rem;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
 }
 
 .form-section {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .form-section.full-width {
@@ -419,7 +420,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    padding-top: 1.5rem;
+    padding-top: 1.25rem;
     border-top: 1px solid #e0e0e0;
 }
 

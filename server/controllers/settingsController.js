@@ -32,9 +32,6 @@ const getSettings = async (req, res) => {
 // @route   PUT /api/settings
 // @access  Private/Admin
 const updateSettings = async (req, res) => {
-    const session = await Settings.startSession();
-    session.startTransaction();
-
     try {
         const updates = req.body;
         const updatedSettings = {};
@@ -42,7 +39,7 @@ const updateSettings = async (req, res) => {
         for (const [key, value] of Object.entries(updates)) {
             if (key === 'updatedBy') continue;
 
-            const setting = await Settings.findOne({ key }).session(session);
+            const setting = await Settings.findOne({ key });
 
             let previousValue = null;
 
@@ -50,16 +47,16 @@ const updateSettings = async (req, res) => {
                 previousValue = setting.value;
                 setting.value = value;
                 setting.updatedBy = req.user._id;
-                await setting.save({ session });
+                await setting.save();
             } else {
                 // Create if doesn't exist (seed on the fly)
-                await Settings.create([{
+                await Settings.create({
                     key,
                     value,
                     updatedBy: req.user._id,
                     // infer category or default to general
                     category: 'general'
-                }], { session });
+                });
             }
 
             updatedSettings[key] = value;
@@ -77,23 +74,18 @@ const updateSettings = async (req, res) => {
             }
         }
 
-        await session.commitTransaction();
-
         res.json({
             success: true,
             message: 'Settings updated successfully',
             data: updatedSettings
         });
     } catch (error) {
-        await session.abortTransaction();
         console.error('Update settings error:', error);
         res.status(500).json({
             success: false,
             message: 'Server error while updating settings',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
-    } finally {
-        session.endSession();
     }
 };
 

@@ -4,8 +4,7 @@ const incomeSchema = new mongoose.Schema({
     financialYear: {
         type: String,
         required: [true, 'Financial year is required'],
-        match: [/^\d{4}-\d{4}$/, 'Financial year must be in format YYYY-YYYY'],
-        index: true
+        match: [/^\d{4}-\d{4}$/, 'Financial year must be in format YYYY-YYYY']
     },
     source: {
         type: String,

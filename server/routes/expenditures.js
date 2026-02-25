@@ -63,4 +63,7 @@ router.put('/:id/reject',
   rejectExpenditure
 );
 
+// Finalize expenditure (Office only - Final sanction after Principal approval)
+router.put('/:id/finalize', authorize('office'), finalizeExpenditure);
+
 module.exports = router;

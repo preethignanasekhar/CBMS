@@ -18,8 +18,7 @@ const financialYearSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['planning', 'active', 'locked', 'closed'],
-        default: 'planning',
-        index: true
+        default: 'planning'
     },
     // Summary fields (calculated/cached)
     totalIncomeExpected: {
@@ -89,7 +88,6 @@ const financialYearSchema = new mongoose.Schema({
 });
 
 // Indexes
-financialYearSchema.index({ year: 1 }, { unique: true });
 financialYearSchema.index({ status: 1 });
 financialYearSchema.index({ startDate: 1, endDate: 1 });
 

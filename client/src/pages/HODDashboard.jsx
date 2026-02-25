@@ -367,13 +367,16 @@ const HODDashboard = () => {
         setShowApprovalModal(false);
         setSelectedExpenditure(null);
       } else if (selectedProposal) {
+        // Governance: Must mark as read if verifying or rejecting a proposal
+        try { await budgetProposalAPI.markProposalAsRead(selectedProposal._id); } catch (e) { }
+
         if (action === 'approve') {
           await budgetProposalAPI.verifyBudgetProposal(selectedProposal._id, {
             remarks: approvalRemarks
           });
         } else {
           await budgetProposalAPI.rejectBudgetProposal(selectedProposal._id, {
-            remarks: approvalRemarks
+            rejectionReason: approvalRemarks
           });
         }
         setShowProposalModal(false);

@@ -404,6 +404,13 @@ a:hover {
   font-size: 1.5rem;
   color: white;
   flex-shrink: 0;
+  overflow: hidden;
+
+  svg {
+    max-width: 60%;
+    max-height: 60%;
+    object-fit: contain;
+  }
 }
 
 .metric-content h3 {

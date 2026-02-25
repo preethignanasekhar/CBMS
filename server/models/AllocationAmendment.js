@@ -4,8 +4,7 @@ const allocationAmendmentSchema = new mongoose.Schema({
     allocation: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Allocation',
-        required: [true, 'Allocation reference is required'],
-        index: true
+        required: [true, 'Allocation reference is required']
     },
     originalAmount: {
         type: Number,
@@ -38,8 +37,7 @@ const allocationAmendmentSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],
-        default: 'pending',
-        index: true
+        default: 'pending'
     },
     approvedBy: {
         type: mongoose.Schema.Types.ObjectId,

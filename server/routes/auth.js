@@ -31,7 +31,7 @@ const validateLogin = [
 
 // Public routes
 router.post('/login', validateLogin, loginUser);
-// router.post('/register', registerUser);
+router.post('/register', registerUser);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
 

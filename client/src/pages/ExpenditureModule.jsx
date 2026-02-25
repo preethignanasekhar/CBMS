@@ -145,8 +145,13 @@ export const Expenditures = () => {
                         onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value, page: 1 }))}
                     >
                         <option value="">All Categories</option>
+                        <option value="EVENT_DECORATION">Decoration</option>
+                        <option value="REFRESHMENTS">Catering</option>
+                        <option value="PRINTING">Printing</option>
+                        <option value="EQUIPMENT">Equipment</option>
+                        <option value="MISCELLANEOUS">Miscellaneous</option>
                         {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            <option key={cat._id} value={cat.name}>{cat.name}</option>
                         ))}
                     </select>
                 </div>
@@ -575,7 +580,7 @@ export const SubmitExpenditure = () => {
                 subtitle="Submit an event-based expenditure request for approval"
             />
 
-            <div className="stepper" style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem', gap: '2rem' }}>
+            <div className="stepper">
                 <div className={`step-item ${step >= 1 ? 'active' : ''}`}>1. Event Info</div>
                 <div className={`step-item ${step >= 2 ? 'active' : ''}`}>2. Expense Items</div>
                 <div className={`step-item ${step >= 3 ? 'active' : ''}`}>3. Final Preview</div>
@@ -963,7 +968,7 @@ export const ResubmitExpenditure = () => {
         <div className="submit-expenditure-container">
             <PageHeader title="Resubmit Event Budget" subtitle="Correct and resubmit your event budget request" />
 
-            <div className="stepper" style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem', gap: '2rem' }}>
+            <div className="stepper">
                 <div className={`step-item ${step >= 1 ? 'active' : ''}`}>1. Info</div>
                 <div className={`step-item ${step >= 2 ? 'active' : ''}`}>2. Items</div>
                 <div className={`step-item ${step >= 3 ? 'active' : ''}`}>3. Submit</div>

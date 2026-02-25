@@ -24,11 +24,10 @@ const ApprovalsQueue = () => {
     try {
       setLoading(true);
       const getPropStatus = () => {
-        if (filters.status === 'pending_approval') {
-          // If filtering for "My Approvals", we let the backend handle the role-based complex query
-          return 'pending_approval'; // Actually, let's use a special flag or just 'submitted,verified'
-        }
+        if (filters.status === 'pending_approval') return 'pending_approval';
         if (filters.status === 'pending') return 'submitted';
+        if (filters.status === 'verified') return 'verified_by_hod';
+        if (filters.status === 'approved') return 'verified_by_principal';
         return filters.status;
       };
 
@@ -58,7 +57,7 @@ const ApprovalsQueue = () => {
         ...item,
         itemType: 'proposal',
         reference: item.department?.name || 'Department Proposal',
-        amount: item.totalProposedAmount || item.items?.reduce((sum, i) => sum + (i.proposedAmount || 0), 0) || 0,
+        amount: item.totalProposedAmount || item.proposalItems?.reduce((sum, i) => sum + (i.proposedAmount || 0), 0) || 0,
         date: item.createdAt
       }));
 
@@ -99,11 +98,17 @@ const ApprovalsQueue = () => {
       if (selectedItem.itemType === 'expenditure') {
         if (actionType === 'verify') await api.verifyExpenditure(id, { remarks });
         else if (actionType === 'approve') await api.approveExpenditure(id, { remarks });
+        else if (actionType === 'finalize') await api.finalizeExpenditure(id, { remarks });
         else if (actionType === 'reject') await api.rejectExpenditure(id, { remarks });
       } else {
+        // Governance: Must mark as read if verifying or approving a proposal
+        if (['verify', 'approve'].includes(actionType)) {
+          try { await budgetProposalAPI.markProposalAsRead(id); } catch (e) { }
+        }
+
         if (actionType === 'verify') await api.verifyBudgetProposal(id, { remarks });
-        else if (actionType === 'approve') await api.approveBudgetProposal(id, { remarks });
-        else if (actionType === 'reject') await api.rejectBudgetProposal(id, { remarks });
+        else if (actionType === 'approve') await api.approveBudgetProposal(id, { notes: remarks });
+        else if (actionType === 'reject') await api.rejectBudgetProposal(id, { rejectionReason: remarks });
       }
 
       setShowModal(false);
@@ -111,7 +116,8 @@ const ApprovalsQueue = () => {
       fetchApprovals();
     } catch (error) {
       console.error("Error processing action:", error);
-      alert("Failed to process action");
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || "Failed to process action";
+      alert(errorMsg);
     }
   };
 
@@ -123,11 +129,19 @@ const ApprovalsQueue = () => {
           <p className="page-subtitle">Verify and approve departmental budget requests</p>
         </div>
         <div className="header-right">
-          <div className="queue-stats">
-            <div className="stat-badge pending">
-              <ClipboardList size={16} />
-              <span>{approvalItems.filter(i => i.status.includes('pending') || i.status === 'submitted').length} Pending</span>
-            </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" className="pending-indicator">
+              <ClipboardList size={16} />{' '}
+              {
+                approvalItems.filter((i) => {
+                  if (user?.role === 'hod') return i.status === 'pending' || i.status === 'submitted';
+                  if (['principal', 'vice_principal'].includes(user?.role)) return i.status === 'verified' || i.status === 'verified_by_hod';
+                  if (user?.role === 'office') return i.status === 'verified_by_principal' || i.status === 'approved';
+                  return false;
+                }).length
+              }{' '}
+              Pending
+            </Button>
           </div>
         </div>
       </div>
@@ -217,6 +231,29 @@ const ApprovalsQueue = () => {
                     </td>
                     <td className="actions-cell text-right">
                       <div className="flex items-center space-x-2">
+                        {/* HOD Action: Verify or Reject (Their Dept Only - API filters) */}
+                        {
+                          user?.role === 'hod' && (
+                            <>
+                              {((item.itemType === 'expenditure' && item.status === 'pending') ||
+                                (item.itemType === 'proposal' && item.status === 'submitted')) && (
+                                  <>
+                                    <Tooltip text="Verify & Send Forward" position="top">
+                                      <button className="btn-icon approve" onClick={() => handleAction(item, 'verify')}>
+                                        <Check size={16} />
+                                      </button>
+                                    </Tooltip>
+                                    <Tooltip text="Reject" position="top">
+                                      <button className="btn-icon reject" onClick={() => handleAction(item, 'reject')}>
+                                        <X size={16} />
+                                      </button>
+                                    </Tooltip>
+                                  </>
+                                )}
+                            </>
+                          )
+                        }
+
                         {/* VP/Principal Action: Approve or Reject (Both Types) */}
                         {
                           ['vice_principal', 'principal'].includes(user?.role) &&
@@ -247,7 +284,7 @@ const ApprovalsQueue = () => {
                               {/* Expenditure Flow: Office only sanctions items approved by Management */}
                               {item.itemType === 'expenditure' && item.status === 'approved' && (
                                 <Tooltip text="Final Sanction (Deduct Budget)" position="top">
-                                  <button className="btn-icon approve" onClick={() => handleAction(item, 'approve')}>
+                                  <button className="btn-icon approve" onClick={() => handleAction(item, 'finalize')}>
                                     <Check size={16} />
                                   </button>
                                 </Tooltip>
@@ -259,7 +296,6 @@ const ApprovalsQueue = () => {
                                   </button>
                                 </Tooltip>
                               )}
-                              {/* Proposal Flow: Office only allocates items verified by Management */}
                               {item.itemType === 'proposal' && item.status === 'verified_by_principal' && (
                                 <Tooltip text="Allocate & Approve" position="top">
                                   <button className="btn-icon approve" onClick={() => handleAction(item, 'approve')}>
@@ -278,7 +314,7 @@ const ApprovalsQueue = () => {
                           )
                         }
 
-                        {['approved', 'rejected', 'verified'].includes(item.status) && <span className="date-text">-</span>}
+                        {['approved', 'rejected', 'verified', 'finalized', 'verified_by_hod', 'verified_by_principal'].includes(item.status) && <span className="date-text">-</span>}
                       </div>
                     </td>
                   </tr>
@@ -342,7 +378,7 @@ const ApprovalsQueue = () => {
                   ) : (
                     <div className="proposal-details">
                       <div style={{ marginBottom: '10px' }}>
-                        <span style={{ color: '#6c757d' }}>Department:</span> <strong>{selectedItem.department}</strong>
+                        <span style={{ color: '#6c757d' }}>Department:</span> <strong>{selectedItem.department?.name || selectedItem.department}</strong>
                       </div>
                       <div className="proposal-items-list">
                         <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
@@ -438,8 +474,9 @@ const ApprovalsQueue = () => {
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button
-                variant={actionType === 'approve' ? 'primary' : 'danger'}
+                variant={actionType === 'reject' ? 'danger' : 'success'}
                 onClick={processAction}
+                disabled={actionType === 'reject' && !remarks.trim()}
               >
                 Confirm {actionType.charAt(0).toUpperCase() + actionType.slice(1)}
               </Button>

@@ -65,6 +65,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+
+  svg {
+    max-width: 60%;
+    max-height: 60%;
+    object-fit: contain;
+  }
 }
 
 .metric-content h3 {

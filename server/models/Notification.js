@@ -27,13 +27,17 @@ const notificationSchema = new mongoose.Schema({
       'budget_allocation_updated',
       'budget_exhaustion_warning',
       'approval_reminder',
-      'system_announcement'
+      'system_announcement',
+      'proposal_submitted',
+      'proposal_verified',
+      'proposal_rejected',
+      'attachments_missing'
     ],
     required: true
   },
   relatedEntity: {
     type: String,
-    enum: ['Expenditure', 'Allocation', 'User', 'System']
+    enum: ['Expenditure', 'Allocation', 'User', 'System', 'BudgetProposal']
   },
   relatedEntityId: {
     type: mongoose.Schema.Types.ObjectId

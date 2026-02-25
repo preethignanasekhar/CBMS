@@ -132,9 +132,6 @@ const getAllocationById = async (req, res) => {
 // @route   POST /api/allocations
 // @access  Private/Office
 const createAllocation = async (req, res) => {
-  const session = await Allocation.startSession();
-  session.startTransaction();
-
   try {
     const {
       financialYear,
@@ -148,8 +145,6 @@ const createAllocation = async (req, res) => {
 
     // Validate required fields
     if (!financialYear || !department || !budgetHead || !allocatedAmount) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Financial year, department, budget head, and allocated amount are required'
@@ -158,8 +153,6 @@ const createAllocation = async (req, res) => {
 
     // GOVERNANCE: Require proposalId for new allocations (unless legacy flag set by admin)
     if (!proposalId && !allowLegacy) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Allocations must be created from approved budget proposals. Please provide proposalId.',
@@ -169,10 +162,8 @@ const createAllocation = async (req, res) => {
 
     // If proposalId provided, validate it
     if (proposalId) {
-      const proposal = await BudgetProposal.findById(proposalId).session(session);
+      const proposal = await BudgetProposal.findById(proposalId);
       if (!proposal) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Budget proposal not found'
@@ -180,8 +171,6 @@ const createAllocation = async (req, res) => {
       }
 
       if (proposal.status !== 'approved') {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({
           success: false,
           message: `Budget proposal must be approved before creating allocation. Current status: ${proposal.status}`
@@ -190,8 +179,6 @@ const createAllocation = async (req, res) => {
 
       // Validate proposal matches allocation data
       if (proposal.department.toString() !== department.toString()) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Proposal department does not match allocation department'
@@ -199,8 +186,6 @@ const createAllocation = async (req, res) => {
       }
 
       if (proposal.financialYear !== financialYear) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Proposal financial year does not match allocation financial year'
@@ -213,11 +198,9 @@ const createAllocation = async (req, res) => {
       financialYear,
       department,
       budgetHead
-    }).session(session);
+    });
 
     if (existingAllocation) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Allocation already exists for this department and budget head in the specified financial year'
@@ -225,10 +208,8 @@ const createAllocation = async (req, res) => {
     }
 
     // Validate department exists
-    const deptExists = await Department.findById(department).session(session);
+    const deptExists = await Department.findById(department);
     if (!deptExists) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Department not found'
@@ -236,10 +217,8 @@ const createAllocation = async (req, res) => {
     }
 
     // Validate budget head exists
-    const budgetHeadExists = await BudgetHead.findById(budgetHead).session(session);
+    const budgetHeadExists = await BudgetHead.findById(budgetHead);
     if (!budgetHeadExists) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({
         success: false,
         message: 'Budget head not found'
@@ -255,7 +234,7 @@ const createAllocation = async (req, res) => {
       sourceProposalId: proposalId || null, // Link to proposal or null for legacy
       status: 'active',
       createdBy: req.user._id
-    }], { session });
+    }]);
 
     const newAllocation = allocation[0];
 
@@ -275,7 +254,7 @@ const createAllocation = async (req, res) => {
       changes: {},
       changeReason: 'Initial allocation created',
       changedBy: req.user._id
-    }], { session });
+    }]);
 
     await session.commitTransaction();
 
@@ -306,16 +285,12 @@ const createAllocation = async (req, res) => {
 // @route   PUT /api/allocations/:id
 // @access  Private/Office
 const updateAllocation = async (req, res) => {
-  const session = await Allocation.startSession();
-  session.startTransaction();
-
   try {
     const { allocatedAmount, remarks, changeReason } = req.body;
     const allocationId = req.params.id;
 
-    const allocation = await Allocation.findById(allocationId).session(session);
+    const allocation = await Allocation.findById(allocationId);
     if (!allocation) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Allocation not found'
@@ -324,7 +299,6 @@ const updateAllocation = async (req, res) => {
 
     // Check if new allocated amount is less than already spent amount
     if (allocatedAmount && parseFloat(allocatedAmount) < allocation.spentAmount) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Allocated amount cannot be less than already spent amount'
@@ -342,7 +316,6 @@ const updateAllocation = async (req, res) => {
         const canBypass = ['admin', 'principal'].includes(req.user.role);
 
         if (!canBypass) {
-          await session.abortTransaction();
 
           // Create amendment request
           const amendment = await AllocationAmendment.create({
@@ -399,8 +372,7 @@ const updateAllocation = async (req, res) => {
 
     // Get current version number
     const latestHistory = await AllocationHistory.findOne({ allocationId })
-      .sort({ version: -1 })
-      .session(session);
+      .sort({ version: -1 });
     const newVersion = latestHistory ? latestHistory.version + 1 : 1;
 
     // Create history record before update
@@ -433,7 +405,7 @@ const updateAllocation = async (req, res) => {
       changes,
       changeReason: changeReason || 'Allocation updated',
       changedBy: req.user._id
-    }], { session });
+    }]);
 
     // Update allocation
     const updateData = {};
@@ -444,7 +416,7 @@ const updateAllocation = async (req, res) => {
     const updatedAllocation = await Allocation.findByIdAndUpdate(
       allocationId,
       updateData,
-      { new: true, runValidators: true, session }
+      { new: true, runValidators: true }
     )
       .populate('department', 'name code')
       .populate('budgetHead', 'name category')
@@ -465,8 +437,6 @@ const updateAllocation = async (req, res) => {
       newValues: updatedAllocation
     });
 
-    await session.commitTransaction();
-
     res.json({
       success: true,
       message: 'Allocation updated successfully',
@@ -476,15 +446,12 @@ const updateAllocation = async (req, res) => {
       }
     });
   } catch (error) {
-    await session.abortTransaction();
     console.error('Update allocation error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while updating allocation',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -631,9 +598,6 @@ const getAllocationStats = async (req, res) => {
 // @route   POST /api/allocations/bulk
 // @access  Private/Office
 const bulkCreateAllocations = async (req, res) => {
-  const session = await Allocation.startSession();
-  session.startTransaction();
-
   try {
     const { allocations } = req.body;
 
@@ -663,7 +627,7 @@ const bulkCreateAllocations = async (req, res) => {
           financialYear: allocationData.financialYear,
           department: allocationData.department,
           budgetHead: allocationData.budgetHead
-        }).session(session);
+        });
 
         if (existingAllocation) {
           errors.push(`Row ${i + 1}: Allocation already exists for this combination`);
@@ -677,7 +641,7 @@ const bulkCreateAllocations = async (req, res) => {
           allocatedAmount: parseFloat(allocationData.allocatedAmount),
           remarks: allocationData.remarks || '',
           createdBy: req.user._id
-        }], { session });
+        }]);
 
         createdAllocations.push(allocation[0]);
       } catch (error) {
@@ -686,15 +650,12 @@ const bulkCreateAllocations = async (req, res) => {
     }
 
     if (createdAllocations.length === 0) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'No allocations were created',
         errors
       });
     }
-
-    await session.commitTransaction();
 
     res.status(201).json({
       success: true,
@@ -706,15 +667,12 @@ const bulkCreateAllocations = async (req, res) => {
       }
     });
   } catch (error) {
-    await session.abortTransaction();
     console.error('Bulk create allocations error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while creating bulk allocations',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 

@@ -127,7 +127,8 @@ const markProposalAsRead = async (req, res) => {
       });
     }
 
-    if (!proposal.readBy.includes(req.user._id)) {
+    const alreadyRead = proposal.readBy.some(id => id.equals(req.user._id));
+    if (!alreadyRead) {
       proposal.readBy.push(req.user._id);
       await proposal.save();
     }
@@ -212,12 +213,17 @@ const updateBudgetProposal = async (req, res) => {
       });
     }
 
-    // Only allow updating drafts or revised proposals
-    if (!['draft', 'revised'].includes(proposal.status)) {
+    // Only allow updating drafts, revised, or approved proposals
+    if (!['draft', 'revised', 'approved'].includes(proposal.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Only draft or revised proposals can be updated'
+        message: 'Only draft, revised, or approved proposals can be updated'
       });
+    }
+
+    // If an approved proposal is edited, it reverts to 'revised' status
+    if (proposal.status === 'approved') {
+      proposal.status = 'revised';
     }
 
     proposal.proposalItems = proposalItems || proposal.proposalItems;
@@ -323,7 +329,8 @@ const approveBudgetProposal = async (req, res) => {
     }
 
     // Must be read by the approver
-    if (!proposal.readBy.includes(req.user._id)) {
+    const hasBeenRead = proposal.readBy.some(id => id.equals(req.user._id));
+    if (!hasBeenRead) {
       return res.status(400).json({
         success: false,
         message: 'You must read the proposal before approving it'
@@ -374,22 +381,6 @@ const approveBudgetProposal = async (req, res) => {
     try {
       for (const item of proposal.proposalItems) {
         try {
-          // Check if allocation already exists
-          const existingAllocation = await Allocation.findOne({
-            financialYear: proposal.financialYear,
-            department: proposal.department,
-            budgetHead: item.budgetHead
-          });
-
-          if (existingAllocation) {
-            console.log(`Allocation already exists for ${item.budgetHead}, skipping auto-creation`);
-            allocationErrors.push({
-              budgetHead: item.budgetHead,
-              reason: 'Allocation already exists'
-            });
-            continue;
-          }
-
           // Determine final allocated amount
           // Use override if present, otherwise default to proposed amount
           let finalAmount = item.proposedAmount;
@@ -399,6 +390,48 @@ const approveBudgetProposal = async (req, res) => {
             if (!isNaN(overrideAmount) && overrideAmount >= 0) {
               finalAmount = overrideAmount;
             }
+          }
+
+          // Check if allocation already exists
+          const existingAllocation = await Allocation.findOne({
+            financialYear: proposal.financialYear,
+            department: proposal.department,
+            budgetHead: item.budgetHead
+          });
+
+          if (existingAllocation) {
+            console.log(`Existing allocation found for ${item.budgetHead}, updating amount to ${finalAmount}`);
+
+            const oldAmount = existingAllocation.allocatedAmount;
+            existingAllocation.allocatedAmount = finalAmount;
+            existingAllocation.remarks = item.justification || `Updated from re-approved budget proposal ${proposal._id}`;
+            existingAllocation.lastModifiedBy = req.user._id;
+            existingAllocation.sourceProposalId = proposal._id;
+
+            await existingAllocation.save();
+
+            // Create history record for amendment
+            await AllocationHistory.create({
+              allocationId: existingAllocation._id,
+              version: (await AllocationHistory.countDocuments({ allocationId: existingAllocation._id })) + 1,
+              changeType: 'amended',
+              snapshot: {
+                department: existingAllocation.department,
+                budgetHead: existingAllocation.budgetHead,
+                allocatedAmount: existingAllocation.allocatedAmount,
+                spentAmount: existingAllocation.spentAmount,
+                financialYear: existingAllocation.financialYear,
+                remarks: existingAllocation.remarks
+              },
+              changes: {
+                allocatedAmount: { from: oldAmount, to: finalAmount }
+              },
+              changeReason: `Updated from re-approved budget proposal ${proposal._id}`,
+              changedBy: req.user._id
+            });
+
+            createdAllocations.push(existingAllocation._id);
+            continue;
           }
 
           // Create allocation
@@ -463,6 +496,9 @@ const approveBudgetProposal = async (req, res) => {
       }
     });
 
+    // Notify Submittor
+    await notifyProposalStatusChange(updatedProposal, 'approve', notes);
+
     res.status(200).json({
       success: true,
       data: {
@@ -509,7 +545,8 @@ const verifyBudgetProposal = async (req, res) => {
     }
 
     // Must be read by the verifier
-    if (!proposal.readBy.includes(req.user._id)) {
+    const hasBeenRead = proposal.readBy.some(id => id.equals(req.user._id));
+    if (!hasBeenRead) {
       return res.status(400).json({
         success: false,
         message: 'You must read the proposal before verifying it'
@@ -631,7 +668,7 @@ const rejectBudgetProposal = async (req, res) => {
       });
     }
 
-    if (!['submitted', 'verified'].includes(proposal.status)) {
+    if (!['submitted', 'verified', 'verified_by_hod', 'verified_by_principal'].includes(proposal.status)) {
       return res.status(400).json({
         success: false,
         message: 'Only submitted or verified proposals can be rejected'

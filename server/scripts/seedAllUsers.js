@@ -27,9 +27,17 @@ async function seedAllUsers() {
 
         // Create sample departments first
         const departments = [
-            { name: 'Computer Science', code: 'CS', description: 'Computer Science Department' },
-            { name: 'Electronics', code: 'ECE', description: 'Electronics & Communication Department' },
-            { name: 'Mechanical', code: 'MECH', description: 'Mechanical Engineering Department' }
+            { name: 'B.E Automobile Engineering', code: 'AU', description: 'Automobile Engineering Department' },
+            { name: 'B.E Civil Engineering', code: 'CIVIL', description: 'Civil Engineering Department' },
+            { name: 'B.E Computer Science and Engineering', code: 'CSE', description: 'Computer Science and Engineering Department' },
+            { name: 'B.E Cyber Security', code: 'CSY', description: 'Cyber Security Department' },
+            { name: 'B.E Electrical and Electronics Engineering', code: 'EEE', description: 'Electrical and Electronics Engineering Department' },
+            { name: 'B.E Electronics and Communication Engineering', code: 'ECE', description: 'Electronics and Communication Engineering Department' },
+            { name: 'B.E Electronics and Instrumentation Engineering', code: 'EIE', description: 'Electronics and Instrumentation Engineering Department' },
+            { name: 'B.E Mechanical Engineering', code: 'MECH', description: 'Mechanical Engineering Department' },
+            { name: 'B.Tech Information Technology', code: 'IT', description: 'Information Technology Department' },
+            { name: 'B.Tech Artificial Intelligence and Data Science', code: 'AIDS', description: 'Artificial Intelligence and Data Science Department' },
+            { name: 'B.Tech Artificial Intelligence and Machine Learning', code: 'AIML', description: 'Artificial Intelligence and Machine Learning Department' }
         ];
 
         const createdDepts = [];
@@ -39,7 +47,10 @@ async function seedAllUsers() {
                 existingDept = await Department.create(dept);
                 console.log(`✅ Created department: ${dept.name}`);
             } else {
-                console.log(`Department ${dept.name} already exists`);
+                // Update name if it changed
+                existingDept.name = dept.name;
+                await existingDept.save();
+                console.log(`Department ${dept.name} already exists, updated name.`);
             }
             createdDepts.push(existingDept);
         }
@@ -78,56 +89,6 @@ async function seedAllUsers() {
                 role: 'vice_principal',
                 permissions: { canApprove: true, exportReports: true }
             },
-            // HODs (one per department)
-            {
-                name: 'Dr. CS HOD',
-                email: 'hod.cs@bms.com',
-                password: 'hod123',
-                role: 'hod',
-                department: createdDepts[0]._id,
-                permissions: { canApprove: true }
-            },
-            {
-                name: 'Dr. ECE HOD',
-                email: 'hod.ece@bms.com',
-                password: 'hod123',
-                role: 'hod',
-                department: createdDepts[1]._id,
-                permissions: { canApprove: true }
-            },
-            {
-                name: 'Dr. MECH HOD',
-                email: 'hod.mech@bms.com',
-                password: 'hod123',
-                role: 'hod',
-                department: createdDepts[2]._id,
-                permissions: { canApprove: true }
-            },
-            // Department Users (Budget Coordinators)
-            {
-                name: 'CS Budget Coordinator',
-                email: 'cs.user@bms.com',
-                password: 'dept123',
-                role: 'department',
-                department: createdDepts[0]._id,
-                permissions: {}
-            },
-            {
-                name: 'ECE Budget Coordinator',
-                email: 'ece.user@bms.com',
-                password: 'dept123',
-                role: 'department',
-                department: createdDepts[1]._id,
-                permissions: {}
-            },
-            {
-                name: 'MECH Budget Coordinator',
-                email: 'mech.user@bms.com',
-                password: 'dept123',
-                role: 'department',
-                department: createdDepts[2]._id,
-                permissions: {}
-            },
             // Auditor
             {
                 name: 'External Auditor',
@@ -137,6 +98,29 @@ async function seedAllUsers() {
                 permissions: { exportReports: true }
             }
         ];
+
+        // Add HODs and Dept Users for each department
+        for (const dept of createdDepts) {
+            const code = dept.code.toLowerCase();
+            // HOD
+            users.push({
+                name: `Dr. ${dept.code} HOD`,
+                email: `hod.${code}@bms.com`,
+                password: 'hod123',
+                role: 'hod',
+                department: dept._id,
+                permissions: { canApprove: true }
+            });
+            // Dept User
+            users.push({
+                name: `${dept.code} Budget Coordinator`,
+                email: `${code}.user@bms.com`,
+                password: 'dept123',
+                role: 'department',
+                department: dept._id,
+                permissions: {}
+            });
+        }
 
         console.log('\n--- Creating Users ---\n');
 
@@ -181,15 +165,12 @@ async function seedAllUsers() {
         }
 
         // Update departments with HODs
-        await Department.findByIdAndUpdate(createdDepts[0]._id, {
-            hod: (await User.findOne({ email: 'hod.cs@bms.com' }))._id
-        });
-        await Department.findByIdAndUpdate(createdDepts[1]._id, {
-            hod: (await User.findOne({ email: 'hod.ece@bms.com' }))._id
-        });
-        await Department.findByIdAndUpdate(createdDepts[2]._id, {
-            hod: (await User.findOne({ email: 'hod.mech@bms.com' }))._id
-        });
+        for (const dept of createdDepts) {
+            const hod = await User.findOne({ email: `hod.${dept.code.toLowerCase()}@bms.com` });
+            if (hod) {
+                await Department.findByIdAndUpdate(dept._id, { hod: hod._id });
+            }
+        }
         console.log('\n✅ Departments updated with HODs');
 
         console.log('\n========================================');
@@ -202,13 +183,11 @@ async function seedAllUsers() {
         console.log('| Office           | office@bms.com       | office123    |');
         console.log('| Principal        | principal@bms.com    | principal123 |');
         console.log('| Vice Principal   | vp@bms.com           | vp123        |');
-        console.log('| HOD (CS)         | hod.cs@bms.com       | hod123       |');
-        console.log('| HOD (ECE)        | hod.ece@bms.com      | hod123       |');
-        console.log('| HOD (MECH)       | hod.mech@bms.com     | hod123       |');
-        console.log('| Dept User (CS)   | cs.user@bms.com      | dept123      |');
-        console.log('| Dept User (ECE)  | ece.user@bms.com     | dept123      |');
-        console.log('| Dept User (MECH) | mech.user@bms.com    | dept123      |');
         console.log('| Auditor          | auditor@bms.com      | auditor123   |');
+        console.log('');
+        console.log('See HOD and Dept User emails based on department codes:');
+        console.log('HOD: hod.[code]@bms.com (Password: hod123)');
+        console.log('Dept: [code].user@bms.com (Password: dept123)');
         console.log('');
 
     } catch (error) {

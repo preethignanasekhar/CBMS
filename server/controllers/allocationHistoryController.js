@@ -87,9 +87,6 @@ const getAllocationVersion = async (req, res) => {
  * @access  Private/Admin
  */
 const rollbackAllocation = async (req, res) => {
-    const session = await Allocation.startSession();
-    session.startTransaction();
-
     try {
         const { id, version } = req.params;
         const { reason } = req.body;
@@ -98,10 +95,9 @@ const rollbackAllocation = async (req, res) => {
         const targetVersion = await AllocationHistory.findOne({
             allocationId: id,
             version: parseInt(version)
-        }).session(session);
+        });
 
         if (!targetVersion) {
-            await session.abortTransaction();
             return res.status(404).json({
                 success: false,
                 message: 'Version not found'
@@ -109,9 +105,8 @@ const rollbackAllocation = async (req, res) => {
         }
 
         // Get current allocation
-        const allocation = await Allocation.findById(id).session(session);
+        const allocation = await Allocation.findById(id);
         if (!allocation) {
-            await session.abortTransaction();
             return res.status(404).json({
                 success: false,
                 message: 'Allocation not found'
@@ -120,7 +115,6 @@ const rollbackAllocation = async (req, res) => {
 
         // Check if rollback amount is valid
         if (targetVersion.snapshot.allocatedAmount < allocation.spentAmount) {
-            await session.abortTransaction();
             return res.status(400).json({
                 success: false,
                 message: 'Cannot rollback to amount less than already spent'
@@ -135,8 +129,7 @@ const rollbackAllocation = async (req, res) => {
 
         // Get next version number
         const latestHistory = await AllocationHistory.findOne({ allocationId: id })
-            .sort({ version: -1 })
-            .session(session);
+            .sort({ version: -1 });
         const newVersion = latestHistory ? latestHistory.version + 1 : 1;
 
         // Create history record for rollback
@@ -157,7 +150,7 @@ const rollbackAllocation = async (req, res) => {
             },
             changeReason: reason || `Rolled back to version ${version}`,
             changedBy: req.user._id
-        }], { session });
+        }]);
 
         // Update allocation
         const updatedAllocation = await Allocation.findByIdAndUpdate(
@@ -167,7 +160,7 @@ const rollbackAllocation = async (req, res) => {
                 remarks: targetVersion.snapshot.remarks,
                 lastModifiedBy: req.user._id
             },
-            { new: true, session }
+            { new: true }
         )
             .populate('department', 'name code')
             .populate('budgetHead', 'name category')
@@ -189,8 +182,6 @@ const rollbackAllocation = async (req, res) => {
             newValues: updatedAllocation
         });
 
-        await session.commitTransaction();
-
         res.json({
             success: true,
             message: `Allocation rolled back to version ${version}`,
@@ -200,15 +191,12 @@ const rollbackAllocation = async (req, res) => {
             }
         });
     } catch (error) {
-        await session.abortTransaction();
         console.error('Rollback allocation error:', error);
         res.status(500).json({
             success: false,
             message: 'Server error while rolling back allocation',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
-    } finally {
-        session.endSession();
     }
 };
 

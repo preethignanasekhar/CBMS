@@ -4,7 +4,7 @@ import { allocationAPI, expenditureAPI, departmentsAPI, reportAPI } from '../ser
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
-import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight } from 'lucide-react';
 import './ConsolidatedDashboard.scss';
 
 const ConsolidatedDashboard = () => {
@@ -78,7 +78,12 @@ const ConsolidatedDashboard = () => {
       setAllocations(allocationsResponse.data.data.allocations);
       setExpenditures(expendituresResponse.data.data.expenditures);
       setDepartments(departmentsResponse.data.data.departments);
-      setStats(statsResponse.data.data);
+
+      // Merge normal stats with consolidated report data
+      setStats({
+        ...statsResponse.data.data,
+        consolidated: dashboardReportResponse.data.data.consolidated
+      });
 
       // Set year comparison data if available
       if (dashboardReportResponse.data.data.consolidated.yearComparison) {
@@ -347,56 +352,24 @@ const ConsolidatedDashboard = () => {
         <div className="department-breakdown">
           <h2 style={{ color: 'black', marginBottom: '2rem', fontWeight: 700, fontSize: '1.5rem', textShadow: 'none' }}>Department-wise Breakdown</h2>
           <div className="department-cards">
-            {departmentStats.map((dept) => (
-              <div
-                key={dept._id}
-                className="department-card"
-                onClick={() => navigate(`/department-detail/${dept._id}`)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="department-header">
-                  <h3 className="department-name">{dept.name}</h3>
-                  <span className="department-code">{dept.code}</span>
-                </div>
+            {departmentStats.map((dept) => {
+              // Get extended data from report if available
+              const reportData = stats?.consolidated?.departmentBreakdown?.[dept.name] || {};
 
-                <div className="department-stats">
-                  <div className="stat-row">
-                    <span className="label">Allocated:</span>
-                    <span className="value">{formatCurrency(dept.totalAllocated)}</span>
-                  </div>
-                  <div className="stat-row">
-                    <span className="label">Spent:</span>
-                    <span className="value spent">{formatCurrency(dept.totalSpent)}</span>
-                  </div>
-                  <div className="stat-row">
-                    <span className="label">Remaining:</span>
-                    <span className="value remaining">{formatCurrency(dept.totalRemaining)}</span>
-                  </div>
-                  <div className="stat-row">
-                    <span className="label">Utilization:</span>
-                    <span className="value">{dept.utilization}%</span>
-                  </div>
+              return (
+                <div
+                  key={dept._id}
+                  className="department-card-minimal"
+                >
+                  <span
+                    className="department-code-badge"
+                    onClick={() => navigate(`/department-detail/${dept._id}`)}
+                  >
+                    {dept.code}
+                  </span>
                 </div>
-
-                <div className="utilization-bar">
-                  <div className="utilization-fill" style={{
-                    width: `${dept.utilization}%`,
-                    backgroundColor: getUtilizationColor(dept.utilization)
-                  }}></div>
-                </div>
-
-                <div className="department-meta">
-                  <div className="meta-item">
-                    <List size={14} />
-                    <span>{dept.allocationCount} Allocations</span>
-                  </div>
-                  <div className="meta-item">
-                    <Receipt size={14} />
-                    <span>{dept.expenditureCount} Expenditures</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

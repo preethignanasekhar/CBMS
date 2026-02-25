@@ -588,10 +588,14 @@ const notifyProposalSubmission = async (proposal) => {
 // Send budget proposal status change notifications
 const notifyProposalStatusChange = async (proposal, action, remarks) => {
   try {
-    const type = action === 'verify' ? 'proposal_verified' : 'proposal_rejected';
+    const isApproval = action === 'verify' || action === 'approve';
+    const type = isApproval
+      ? (action === 'approve' ? 'expenditure_approved' : 'proposal_verified') // reuse or add new types
+      : 'proposal_rejected';
 
+    // 1. Always notify the submittor
     await createNotification({
-      recipient: proposal.submittedBy,
+      recipient: proposal.submittedBy._id || proposal.submittedBy,
       type: type,
       relatedEntity: 'BudgetProposal',
       relatedEntityId: proposal._id,
@@ -599,11 +603,93 @@ const notifyProposalStatusChange = async (proposal, action, remarks) => {
       metadata: {
         financialYear: proposal.financialYear,
         action,
-        remarks
+        remarks,
+        status: proposal.status
+      }
+    });
+
+    // 2. If it's a verification, notify the NEXT role in the chain
+    if (action === 'verify') {
+      let nextRoles = [];
+      let actionUrl = '/approvals';
+
+      if (proposal.status === 'verified_by_hod') {
+        nextRoles = ['principal', 'vice_principal'];
+      } else if (proposal.status === 'verified_by_principal') {
+        nextRoles = ['office'];
+      }
+
+      if (nextRoles.length > 0) {
+        const nextApprovers = await getUsersByRole(nextRoles);
+        const recipients = nextApprovers.map(u => u._id);
+
+        await sendBulkNotification(recipients, {
+          type: 'proposal_submitted', // Reuse this type for 'requires your review'
+          title: 'Budget Proposal Awaiting Your Verification',
+          message: `A budget proposal from ${proposal.department.name} has been verified and now requires your review.`,
+          relatedEntity: 'BudgetProposal',
+          relatedEntityId: proposal._id,
+          actionUrl: actionUrl,
+          priority: 'high',
+          metadata: {
+            financialYear: proposal.financialYear,
+            department: proposal.department.name,
+            amount: proposal.totalProposedAmount
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error sending proposal status change notifications:', error);
+  }
+};
+
+// Send expenditure verification notifications (HOD -> Prin/VP)
+const notifyExpenditureVerification = async (expenditure) => {
+  try {
+    const principalUsers = await getUsersByRole(['principal', 'vice_principal']);
+    const recipients = principalUsers.map(user => user._id);
+
+    if (recipients.length > 0) {
+      await sendBulkNotification(recipients, {
+        type: 'expenditure_submitted',
+        title: 'Expenditure Verified - Awaiting Approval',
+        message: `An expenditure for "${expenditure.eventName}" has been verified by the HOD and requires your approval.`,
+        relatedEntity: 'Expenditure',
+        relatedEntityId: expenditure._id,
+        actionUrl: '/approvals',
+        priority: 'high',
+        metadata: {
+          eventName: expenditure.eventName,
+          amount: expenditure.totalAmount,
+          department: expenditure.department.name
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error sending expenditure verification notifications:', error);
+  }
+};
+
+// Send expenditure finalization notifications (Office -> Submittor)
+const notifyExpenditureFinalization = async (expenditure) => {
+  try {
+    await createNotification({
+      recipient: expenditure.submittedBy,
+      type: 'expenditure_approved',
+      title: 'Expenditure Sanctioned & Finalized',
+      message: `Your expenditure for "${expenditure.eventName}" has been sanctioned and finalized by the Office.`,
+      relatedEntity: 'Expenditure',
+      relatedEntityId: expenditure._id,
+      actionUrl: '/expenditures',
+      priority: 'high',
+      metadata: {
+        eventName: expenditure.eventName,
+        amount: expenditure.totalAmount
       }
     });
   } catch (error) {
-    console.error('Error sending proposal status change notifications:', error);
+    console.error('Error sending expenditure finalization notifications:', error);
   }
 };
 
@@ -618,5 +704,7 @@ module.exports = {
   notifyBudgetExhaustion,
   sendApprovalReminders,
   notifyProposalSubmission,
-  notifyProposalStatusChange
+  notifyProposalStatusChange,
+  notifyExpenditureVerification,
+  notifyExpenditureFinalization
 };

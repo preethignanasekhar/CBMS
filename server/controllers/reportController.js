@@ -351,7 +351,13 @@ const getDashboardReport = async (req, res) => {
       monthlyTrend: {},
       dailyTotal: 0,
       dailyDepartmentBreakdown: {},
-      yearComparison: null
+      yearComparison: null,
+      counts: {
+        pendingProposals: proposals.filter(p => p.status === 'submitted').length,
+        verifiedProposals: proposals.filter(p => p.status === 'verified_by_hod').length,
+        pendingExpenditures: expenditures.filter(e => e.status === 'pending').length,
+        verifiedExpenditures: expenditures.filter(e => e.status === 'verified').length
+      }
     };
 
     consolidated.remainingBalance = consolidated.totalAllocated - consolidated.totalUtilized;
@@ -385,21 +391,69 @@ const getDashboardReport = async (req, res) => {
       if (!consolidated.departmentBreakdown[deptName]) {
         consolidated.departmentBreakdown[deptName] = {
           allocated: 0,
-          spent: 0,
+          requested: 0,
+          utilized: 0,
+          pending: 0,
           remaining: 0,
-          utilization: 0
+          utilization: 0,
+          counts: {
+            pending: 0,
+            verified: 0,
+            approved: 0,
+            finalized: 0,
+            rejected: 0
+          }
         };
       }
       consolidated.departmentBreakdown[deptName].allocated += alloc.allocatedAmount;
-      consolidated.departmentBreakdown[deptName].spent += alloc.spentAmount;
-      consolidated.departmentBreakdown[deptName].remaining += alloc.remainingAmount;
     });
 
-    // Calculate department utilization
+    // Add expenditure data to department breakdown
+    expenditures.forEach(exp => {
+      if (!exp.department) return;
+      const deptName = exp.department.name;
+      if (!consolidated.departmentBreakdown[deptName]) {
+        consolidated.departmentBreakdown[deptName] = {
+          allocated: 0,
+          requested: 0,
+          utilized: 0,
+          pending: 0,
+          remaining: 0,
+          utilization: 0,
+          counts: {
+            pending: 0,
+            verified: 0,
+            approved: 0,
+            finalized: 0,
+            rejected: 0
+          }
+        };
+      }
+
+      const amount = exp.totalAmount || 0;
+      const deptData = consolidated.departmentBreakdown[deptName];
+
+      // Monetary metrics
+      if (['pending', 'verified', 'approved'].includes(exp.status)) {
+        deptData.requested += amount;
+        deptData.pending += amount;
+      } else if (exp.status === 'finalized') {
+        deptData.requested += amount;
+        deptData.utilized += amount;
+      }
+
+      // Counts
+      if (deptData.counts.hasOwnProperty(exp.status)) {
+        deptData.counts[exp.status]++;
+      }
+    });
+
+    // Final calculations for departments
     Object.keys(consolidated.departmentBreakdown).forEach(dept => {
       const deptData = consolidated.departmentBreakdown[dept];
+      deptData.remaining = deptData.allocated - deptData.utilized;
       if (deptData.allocated > 0) {
-        deptData.utilization = (deptData.spent / deptData.allocated) * 100;
+        deptData.utilization = (deptData.utilized / deptData.allocated) * 100;
       }
     });
 

@@ -8,9 +8,12 @@ const {
   notifyExpenditureSubmission,
   notifyExpenditureApproval,
   notifyExpenditureRejection,
-  notifyBudgetExhaustion
+  notifyBudgetExhaustion,
+  notifyExpenditureVerification,
+  notifyExpenditureFinalization
 } = require('../utils/notificationService');
 const { recordAuditLog } = require('../utils/auditService');
+const { broadcast } = require('../services/socketService');
 
 const getSetting = async (key, defaultValue) => {
   try {
@@ -35,7 +38,8 @@ const getExpenditures = async (req, res) => {
       status,
       financialYear,
       search,
-      submittedBy
+      submittedBy,
+      category
     } = req.query;
 
     const query = {};
@@ -68,6 +72,7 @@ const getExpenditures = async (req, res) => {
     if (budgetHead) query.budgetHead = budgetHead;
     if (financialYear) query.financialYear = financialYear;
     if (submittedBy) query.submittedBy = submittedBy;
+    if (category) query['expenseItems.category'] = { $regex: category, $options: 'i' };
     if (search) {
       query.$or = [
         { eventName: { $regex: search, $options: 'i' } },
@@ -152,9 +157,6 @@ const getExpenditureById = async (req, res) => {
 // @route   POST /api/expenditures
 // @access  Private/Department
 const submitExpenditure = async (req, res) => {
-  const session = await Expenditure.startSession();
-  session.startTransaction();
-
   try {
     let {
       budgetHead,
@@ -211,10 +213,9 @@ const submitExpenditure = async (req, res) => {
       department: req.user.department,
       budgetHead,
       financialYear
-    }).session(session);
+    });
 
     if (!allocation) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'No budget has been allocated for this budget head'
@@ -226,7 +227,6 @@ const submitExpenditure = async (req, res) => {
     const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
 
     if (totalAmount > remainingAmount && overspendPolicy === 'disallow') {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: `Total event amount (₹${totalAmount.toLocaleString()}) exceeds remaining budget (₹${remainingAmount.toLocaleString()})`,
@@ -251,9 +251,7 @@ const submitExpenditure = async (req, res) => {
       submittedBy: req.user._id,
       financialYear,
       status: 'pending'
-    }], { session });
-
-    await session.commitTransaction();
+    }]);
 
     // Log the submission
     await recordAuditLog({
@@ -282,9 +280,6 @@ const submitExpenditure = async (req, res) => {
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    if (session.transaction.state !== 'TRANSACTION_ABORTED') {
-      await session.abortTransaction();
-    }
     console.error('Submit expenditure error:', error);
 
     // Provide detailed error for validation failures
@@ -302,8 +297,6 @@ const submitExpenditure = async (req, res) => {
       message: 'Server error while submitting expenditure',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -311,16 +304,12 @@ const submitExpenditure = async (req, res) => {
 // @route   PUT /api/expenditures/:id/approve
 // @access  Private/Office/VicePrincipal/Principal
 const approveExpenditure = async (req, res) => {
-  const session = await Expenditure.startSession();
-  session.startTransaction();
-
   try {
     const { remarks } = req.body;
     const expenditureId = req.params.id;
 
-    const expenditure = await Expenditure.findById(expenditureId).session(session);
+    const expenditure = await Expenditure.findById(expenditureId);
     if (!expenditure) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Expenditure not found'
@@ -331,7 +320,6 @@ const approveExpenditure = async (req, res) => {
     // Department -> HOD (Verify) -> Principal (Approve) -> Office (Finalize)
     // Principal/VP can ONLY approve VERIFIED items (HOD verification is mandatory)
     if (expenditure.status !== 'verified') {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Expenditure must be verified by HOD before Management approval'
@@ -341,7 +329,6 @@ const approveExpenditure = async (req, res) => {
     // Role check for approval - ONLY Management (Principal/VP)
     const allowedApprovalRoles = ['vice_principal', 'principal'];
     if (!allowedApprovalRoles.includes(req.user.role)) {
-      await session.abortTransaction();
       return res.status(403).json({
         success: false,
         message: 'Only Principal or Vice Principal can approve expenditures'
@@ -353,10 +340,9 @@ const approveExpenditure = async (req, res) => {
       department: expenditure.department,
       budgetHead: expenditure.budgetHead,
       financialYear: expenditure.financialYear
-    }).session(session);
+    });
 
     if (!allocation) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Allocation not found'
@@ -368,7 +354,6 @@ const approveExpenditure = async (req, res) => {
     const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
 
     if (expenditure.totalAmount > remainingAmount && overspendPolicy === 'disallow') {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Approval would exceed allocated budget, and overspend is disallowed.'
@@ -385,18 +370,11 @@ const approveExpenditure = async (req, res) => {
     // Vice Principal threshold check (₹50,000)
     if (req.user.role === 'vice_principal') {
       if (amount > 50000) {
-        await session.abortTransaction();
         return res.status(403).json({
           success: false,
           message: 'Vice Principal can only approve expenditures up to ₹50,000. This requires Principal approval.'
         });
       }
-    }
-
-    // Ensure sequencing: verified -> approved
-    if (expenditure.status === 'pending') {
-      // If still pending, we allow approval but it counts as both verification and approval
-      // Or we can enforce verification first. Let's allow for 'Office' to do both if needed.
     }
 
     // Update expenditure status and add approval step
@@ -409,14 +387,14 @@ const approveExpenditure = async (req, res) => {
       timestamp: new Date()
     });
 
-    await expenditure.save({ session });
+    await expenditure.save();
 
-    // REMOVED: Incrementing spentAmount here. 
-    // Logic: Budget calculation happens at 'Finalized' (Office Sanction) stage
-    // to comply with mandatory project rule.
-
-    await session.commitTransaction();
-    let transactionCommitted = true;
+    // Population for notification and audit
+    const populatedExpenditure = await Expenditure.findById(expenditureId)
+      .populate('department', 'name code')
+      .populate('budgetHead', 'name category')
+      .populate('submittedBy', 'name email')
+      .populate('approvalSteps.approver', 'name email role');
 
     // Send notifications
     try {
@@ -456,17 +434,12 @@ const approveExpenditure = async (req, res) => {
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    if (session.transaction.isActive && !session.transaction.isCommitted) {
-      await session.abortTransaction();
-    }
     console.error('Approve expenditure error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while approving expenditure',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -557,16 +530,12 @@ const rejectExpenditure = async (req, res) => {
 // @route   PUT /api/expenditures/:id/finalize
 // @access  Private/Office
 const finalizeExpenditure = async (req, res) => {
-  const session = await Expenditure.startSession();
-  session.startTransaction();
-
   try {
     const { remarks } = req.body;
     const expenditureId = req.params.id;
 
-    const expenditure = await Expenditure.findById(expenditureId).session(session);
+    const expenditure = await Expenditure.findById(expenditureId);
     if (!expenditure) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Expenditure not found'
@@ -575,7 +544,6 @@ const finalizeExpenditure = async (req, res) => {
 
     // Can only finalize if it's already approved
     if (expenditure.status !== 'approved') {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Expenditure must be approved before it can be finalized'
@@ -587,10 +555,9 @@ const finalizeExpenditure = async (req, res) => {
       department: expenditure.department,
       budgetHead: expenditure.budgetHead,
       financialYear: expenditure.financialYear
-    }).session(session);
+    });
 
     if (!allocation) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Allocation not found'
@@ -607,7 +574,7 @@ const finalizeExpenditure = async (req, res) => {
       timestamp: new Date()
     });
 
-    await expenditure.save({ session });
+    await expenditure.save();
 
     // NEW: Update allocation spent amount atomically during finalization (Office Sanction)
     const overspendPolicy = await getSetting('budget_overspend_policy', 'disallow');
@@ -620,18 +587,16 @@ const finalizeExpenditure = async (req, res) => {
         } : {})
       },
       { $inc: { spentAmount: expenditure.totalAmount } },
-      { session, new: true }
+      { new: true }
     );
 
     if (!updateResult) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Budget exceeded during finalization attempt or allocation not found.'
       });
     }
 
-    await session.commitTransaction();
     let transactionCommitted = true;
 
     // REAL-TIME UPDATE: Notify all clients to update their dashboards
@@ -672,23 +637,21 @@ const finalizeExpenditure = async (req, res) => {
       .populate('submittedBy', 'name email')
       .populate('approvalSteps.approver', 'name email role');
 
+    // Send notification to submittor
+    await notifyExpenditureFinalization(populatedExpenditure);
+
     res.json({
       success: true,
       message: 'Expenditure finalized successfully',
       data: { expenditure: populatedExpenditure }
     });
   } catch (error) {
-    if (session.transaction.isActive && !session.transaction.isCommitted) {
-      await session.abortTransaction();
-    }
     console.error('Finalize expenditure error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while finalizing expenditure',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -765,6 +728,9 @@ const verifyExpenditure = async (req, res) => {
       .populate('budgetHead', 'name category')
       .populate('submittedBy', 'name email')
       .populate('approvalSteps.approver', 'name email role');
+
+    // Send notification to next level (Principal/VP)
+    await notifyExpenditureVerification(populatedExpenditure);
 
     res.json({
       success: true,
@@ -860,6 +826,13 @@ const resubmitExpenditure = async (req, res) => {
       });
     }
 
+    // Compute date and totals
+    const eventDateObj = new Date(eventDate || originalExpenditure.eventDate);
+    const resolvedItems = Array.isArray(expenseItems) && expenseItems.length > 0
+      ? expenseItems
+      : originalExpenditure.expenseItems;
+    const totalAmount = resolvedItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+
     // Create new expenditure based on original
     const newExpenditure = await Expenditure.create([{
       department: originalExpenditure.department,
@@ -868,12 +841,13 @@ const resubmitExpenditure = async (req, res) => {
       eventType: eventType || originalExpenditure.eventType,
       eventDate: eventDateObj,
       description: description || originalExpenditure.description,
-      expenseItems: expenseItems.map(item => ({
+      expenseItems: resolvedItems.map(item => ({
         ...item,
         category: item.category || 'MISCELLANEOUS',
         amount: Number(item.amount) || 0,
         billDate: item.billDate ? new Date(item.billDate) : new Date()
       })),
+      totalAmount,
       submittedBy: req.user._id,
       financialYear: originalExpenditure.financialYear,
       status: 'pending',

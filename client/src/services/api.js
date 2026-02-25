@@ -198,6 +198,7 @@ export const expenditureAPI = {
   }),
   approveExpenditure: (id, data) => api.put(`/expenditures/${id}/approve`, data),
   rejectExpenditure: (id, data) => api.put(`/expenditures/${id}/reject`, data),
+  finalizeExpenditure: (id, data) => api.put(`/expenditures/${id}/finalize`, data),
   resubmitExpenditure: (id, data) => api.post(`/expenditures/${id}/resubmit`, data, {
     headers: {
       'Content-Type': data instanceof FormData ? 'multipart/form-data' : 'application/json'

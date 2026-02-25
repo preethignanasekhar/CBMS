@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -17,7 +17,8 @@ import {
     Plus, IndianRupee, CreditCard, Wallet, PieChart as PieChartIcon, Pencil, Trash2, X,
     Tag, AlertCircle, Save, AlignLeft, Hash, ArrowLeft, Eye, CheckCircle,
     XCircle, Clock, DollarSign, Send, Check, RefreshCcw, ShieldCheck,
-    TrendingUp, TrendingDown, FileText, RotateCw, Download, ArrowUpRight, Search
+    TrendingUp, TrendingDown, FileText, RotateCw, Download, ArrowUpRight, Search,
+    AlertTriangle
 } from 'lucide-react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -938,7 +939,8 @@ export const BudgetProposalForm = () => {
                 try {
                     setFetching(true);
                     const response = await budgetProposalAPI.getBudgetProposalById(id);
-                    const proposal = response.data.data.proposal;
+                    // Server returns { success, data: <proposalObject> } — not nested under .proposal
+                    const proposal = response.data.data;
 
                     // Fetch budget heads for this department
                     if (proposal.department && proposal.department._id) {
@@ -946,7 +948,8 @@ export const BudgetProposalForm = () => {
                     }
 
                     const items = proposal.proposalItems.map(item => ({
-                        budgetHead: item.budgetHead._id,
+                        // budgetHead may be a populated object or a raw string ID
+                        budgetHead: item.budgetHead?._id || item.budgetHead,
                         proposedAmount: item.proposedAmount,
                         justification: item.justification,
                         previousYearUtilization: item.previousYearUtilization || 0
@@ -1093,16 +1096,22 @@ export const BudgetProposalForm = () => {
         }));
     };
 
+    // Use a ref for the refresh function to keep the interval stable across renders
+    const refreshAllStatsRef = useRef(refreshAllStats);
+    useEffect(() => {
+        refreshAllStatsRef.current = refreshAllStats;
+    }, [refreshAllStats]);
+
     // Auto-refresh current year spent amounts every 30 seconds
     useEffect(() => {
         const interval = setInterval(() => {
             if (formData.department && formData.proposalItems.some(item => item.budgetHead)) {
-                refreshAllStats();
+                refreshAllStatsRef.current();
             }
         }, 30000); // 30 seconds
 
         return () => clearInterval(interval);
-    }, [formData.department, formData.proposalItems, refreshAllStats]);
+    }, [formData.department]); // Only restart if department changes
 
     const addItem = () => {
         setFormData(prev => ({
@@ -1144,10 +1153,23 @@ export const BudgetProposalForm = () => {
                 return;
             }
 
-            if (formData.proposalItems.some(item => !item.budgetHead || !item.proposedAmount || !item.justification)) {
-                setError('Please fill in all required fields for each proposal item');
-                setLoading(false);
-                return;
+            for (let i = 0; i < formData.proposalItems.length; i++) {
+                const item = formData.proposalItems[i];
+                if (!item.budgetHead) {
+                    setError(`Please select a Budget Head for Item ${i + 1}`);
+                    setLoading(false);
+                    return;
+                }
+                if (item.proposedAmount === '' || item.proposedAmount === undefined || item.proposedAmount === null) {
+                    setError(`Please enter a Proposed Amount for Item ${i + 1}`);
+                    setLoading(false);
+                    return;
+                }
+                if (!String(item.justification || '').trim()) {
+                    setError(`Please provide a Justification for Item ${i + 1}`);
+                    setLoading(false);
+                    return;
+                }
             }
 
             const submitData = {
@@ -1262,8 +1284,44 @@ export const BudgetProposalForm = () => {
                 </button>
             </PageHeader>
 
-            {error && <div className="error-message">{error}</div>}
-            {success && <div className="success-message">{success}</div>}
+            {error && (
+                <div className="error-message">
+                    <button className="close-popup" onClick={() => setError(null)} title="Close">
+                        <X size={14} />
+                    </button>
+                    <AlertCircle size={18} /> {error}
+                </div>
+            )}
+            {success && (
+                <div className="success-message">
+                    <button className="close-popup" onClick={() => setSuccess(null)} title="Close">
+                        <X size={14} />
+                    </button>
+                    <CheckCircle size={18} /> {success}
+                </div>
+            )}
+
+            {formData.status === 'approved' && isEditMode && (
+                <div className="warning-message" style={{
+                    backgroundColor: '#fff3cd',
+                    color: '#856404',
+                    padding: '0.6rem 1rem',
+                    borderRadius: '8px',
+                    marginBottom: '1.25rem',
+                    border: '1px solid #ffeeba',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '0.9rem'
+                }}>
+                    <AlertTriangle size={24} />
+                    <div>
+                        <strong>Warning:</strong> This proposal has already been approved.
+                        Editing and saving it will revert its status to <strong>Revised</strong> and require a new round of approvals.
+                        Existing allocations will be updated only after the new version is approved.
+                    </div>
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="budget-proposal-form">
                 <div className="form-section">
@@ -1309,8 +1367,8 @@ export const BudgetProposalForm = () => {
                             onChange={handleInputChange}
                             placeholder="Additional notes for the proposal"
                             rows="3"
-                            disabled={isEditMode && ['hod', 'officer', 'vp', 'p'].includes(user?.role)}
-                            style={isEditMode && ['hod', 'officer', 'vp', 'p'].includes(user?.role) ? { opacity: 0.6 } : {}}
+                            disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                            style={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
                         />
                     </div>
                 </div>
@@ -1349,7 +1407,7 @@ export const BudgetProposalForm = () => {
                                         value={item.budgetHead}
                                         onChange={(e) => handleItemChange(index, 'budgetHead', e.target.value)}
                                         required
-                                        disabled={isEditMode && ['hod', 'officer', 'vp', 'p'].includes(user?.role)}
+                                        disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
                                     >
                                         <option value="">Select Budget Head</option>
                                         {budgetHeads.map(head => (
@@ -1370,7 +1428,7 @@ export const BudgetProposalForm = () => {
                                         min="0"
                                         step="0.01"
                                         required
-                                        disabled={isEditMode && ['hod', 'officer', 'vp', 'p'].includes(user?.role)}
+                                        disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
                                     />
                                 </div>
 
@@ -2458,7 +2516,7 @@ export const BudgetProposals = () => {
                                                     <Eye size={16} />
                                                 </Link>
                                             </Tooltip>
-                                            {(proposal.status === 'draft' || proposal.status === 'revised') && (
+                                            {(proposal.status === 'draft' || proposal.status === 'revised' || proposal.status === 'approved') && (
                                                 <>
                                                     <Tooltip text="Edit Proposal" position="top">
                                                         <Link
