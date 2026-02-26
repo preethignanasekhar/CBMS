@@ -18,14 +18,14 @@ const getBudgetProposals = async (req, res) => {
     if (financialYear) query.financialYear = financialYear;
 
     // Status filtering
-    if (status) {
+    if (status && status !== 'all') {
       query.status = status;
     }
 
     // Role-based visibility and default filtering if status not provided
     if (['department', 'hod'].includes(req.user.role)) {
       query.department = req.user.department;
-    } else if (department) {
+    } else if (department && department !== 'undefined' && department !== 'all') {
       query.department = department;
     }
 
@@ -35,12 +35,11 @@ const getBudgetProposals = async (req, res) => {
         // HOD can see all department proposals in history/list views
         // Only restrict to 'submitted' if explicitly asked (like in approvals queue)
         // For standard GET, we allow all except maybe drafts if not requested
-      } else if (['principal', 'vice_principal'].includes(req.user.role)) {
-        // Default Principal view: content verified by HOD
-        if (!query.status) query.status = 'verified_by_hod';
-      } else if (req.user.role === 'office') {
-        // Default Office view: content verified by Principal
-        if (!query.status) query.status = 'verified_by_principal';
+      } else if (['principal', 'vice_principal', 'office', 'admin'].includes(req.user.role)) {
+        // Principal/VP/Office can see everything from submitted onwards by default
+        if (!query.status) {
+          query.status = { $in: ['submitted', 'verified_by_hod', 'verified_by_principal', 'approved', 'allocated', 'rejected'] };
+        }
       }
     }
 
@@ -849,7 +848,7 @@ const getBudgetProposalsStats = async (req, res) => {
         approvedProposals,
         rejectedProposals,
         draftProposals,
-        totalApprovedAmount: totalProposedAmount[0]?.total || 0
+        totalApprovedAmount: totalApprovedAmount[0]?.total || 0
       }
     });
   } catch (error) {

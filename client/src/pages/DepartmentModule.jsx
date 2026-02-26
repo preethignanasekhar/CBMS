@@ -375,51 +375,6 @@ export const DepartmentDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="card-standard expenditure-history">
-                        <div className="card-standard-header">
-                            <h2>Recent Expenditures</h2>
-                            <p>Latest approved spending entries</p>
-                        </div>
-                        <div className="expenditure-list">
-                            {expenditures.slice(0, 10).map((expenditure) => (
-                                <div key={expenditure._id} className="expenditure-item">
-                                    <div className="expenditure-info">
-                                        <div className="bill-info">
-                                            <h4 className="bill-number">{expenditure.billNumber}</h4>
-                                            <span className="budget-head">{expenditure.budgetHead?.name || 'Unknown'}</span>
-                                        </div>
-                                        <div className="expenditure-details">
-                                            <span className="party-name">{expenditure.partyName}</span>
-                                            <span className="bill-date">{formatDate(expenditure.billDate)}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="expenditure-amount">
-                                        <span className="amount">{formatCurrency(expenditure.billAmount)}</span>
-                                    </div>
-
-                                    <div className="expenditure-status">
-                                        <span
-                                            className="status-badge"
-                                            style={{ backgroundColor: getStatusColor(expenditure.status), color: 'white' }}
-                                        >
-                                            {expenditure.status.charAt(0).toUpperCase() + expenditure.status.slice(1)}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {expenditures.length === 0 && (
-                            <div className="no-expenditures">
-                                <div className="no-expenditures-icon">
-                                    <Receipt size={16} />
-                                </div>
-                                <h3>No Expenditures</h3>
-                                <p>No expenditures have been submitted yet.</p>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
         </div>

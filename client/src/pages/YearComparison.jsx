@@ -560,9 +560,7 @@ const YearComparison = () => {
             </div>
           </div>
 
-          {renderDepartmentComparison()}
-          {renderDepartmentComparison()}
-          {renderBudgetHeadComparison()}
+
         </div>
       )}
     </div>

@@ -373,87 +373,8 @@ const ConsolidatedDashboard = () => {
           </div>
         </div>
 
-        <div className="recent-activities">
-          <h2>Recent Activities</h2>
-          <div className="activity-list">
-            {expenditures.slice(0, 10).map((expenditure) => (
-              <div key={expenditure._id} className="activity-item">
-                <div className="activity-icon">
-                  <Receipt size={20} />
-                </div>
-                <div className="activity-content">
-                  <div className="activity-title">
-                    {expenditure.billNumber} - {expenditure.department?.name || expenditure.departmentName || 'N/A'}
-                  </div>
-                  <div className="activity-details">
-                    {expenditure.budgetHead?.name || expenditure.budgetHeadName || 'N/A'} • {expenditure.partyName}
-                  </div>
-                  <div className="activity-meta">
-                    <span className="amount">{formatCurrency(expenditure.billAmount)}</span>
-                    <span className="date">{formatDate(expenditure.submittedAt)}</span>
-                  </div>
-                </div>
-                <div className="activity-status">
-                  <span
-                    className={`status-badge ${expenditure.status}`}
-                    style={{ backgroundColor: getUtilizationColor(expenditure.status === 'approved' ? 100 : expenditure.status === 'pending' ? 50 : 0) }}
-                  >
-                    {expenditure.status.charAt(0).toUpperCase() + expenditure.status.slice(1)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      <div className="budget-head-breakdown">
-        <h2>Budget Head-wise Breakdown</h2>
-        <div className="breakdown-table table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>Budget Head</th>
-                <th>Total Allocated</th>
-                <th>Total Spent</th>
-                <th>Remaining</th>
-                <th>Utilization</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats?.budgetHeadStats?.map((budgetHead) => (
-                <tr key={budgetHead.budgetHeadCode}>
-                  <td data-label="Budget Head">
-                    <div className="budget-head-info">
-                      <span className="head-name">{budgetHead.budgetHeadName}</span>
-                      <span className="head-code">{budgetHead.budgetHeadCode}</span>
-                    </div>
-                  </td>
-                  <td className="amount" data-label="Total Allocated">{formatCurrency(budgetHead.totalAllocated)}</td>
-                  <td className="amount" data-label="Total Spent">{formatCurrency(budgetHead.totalSpent)}</td>
-                  <td className="amount" data-label="Remaining">{formatCurrency(budgetHead.totalRemaining)}</td>
-                  <td data-label="Utilization">
-                    <div className="utilization-cell">
-                      <div className="utilization-bar-small">
-                        <div
-                          className="utilization-fill-small"
-                          style={{
-                            width: `${getUtilizationPercentage(budgetHead.totalAllocated, budgetHead.totalSpent)}%`,
-                            backgroundColor: getUtilizationColor(getUtilizationPercentage(budgetHead.totalAllocated, budgetHead.totalSpent))
-                          }}
-                        ></div>
-                      </div>
-                      <span className="utilization-text-small">
-                        {getUtilizationPercentage(budgetHead.totalAllocated, budgetHead.totalSpent)}%
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

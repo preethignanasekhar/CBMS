@@ -227,6 +227,38 @@ const getDashboardSummary = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Analyze event requirements using AI
+ * @route   POST /api/ai/analyze-event
+ * @access  Private
+ */
+const analyzeEvent = async (req, res) => {
+    try {
+        const { eventName, eventDescription } = req.body;
+
+        if (!eventName) {
+            return res.status(400).json({
+                success: false,
+                message: 'Event name is required'
+            });
+        }
+
+        const analysis = await aiService.analyzeEventRequirements(eventName, eventDescription);
+
+        res.json({
+            success: true,
+            data: analysis
+        });
+    } catch (error) {
+        console.error('Error in analyzeEvent controller:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error analyzing event requirements',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getAnomalies,
     getRiskScores,
@@ -234,5 +266,6 @@ module.exports = {
     getYearComparison,
     getInsights,
     getSystemHealth,
-    getDashboardSummary
+    getDashboardSummary,
+    analyzeEvent
 };

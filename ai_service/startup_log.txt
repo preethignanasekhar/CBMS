@@ -1,0 +1,15 @@
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.12.70:5001
+Press CTRL+C to quit
+127.0.0.1 - - [26/Feb/2026 12:04:05] "GET /socket.io/?EIO=4&transport=polling&t=38a8mm4i HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:06] "GET /socket.io/?EIO=4&transport=polling&t=38ax33a3 HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:08] "GET /socket.io/?EIO=4&transport=polling&t=38cm4t71 HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:11] "GET /socket.io/?EIO=4&transport=polling&t=38epnoid HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:16] "GET /socket.io/?EIO=4&transport=polling&t=38ikxg1f HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:21] "GET /socket.io/?EIO=4&transport=polling&t=38mg8637 HTTP/1.1" 404 -
+127.0.0.1 - - [26/Feb/2026 12:04:35] "POST /analyze-event HTTP/1.1" 200 -
+127.0.0.1 - - [26/Feb/2026 12:17:04] "POST /analyze-event HTTP/1.1" 200 -

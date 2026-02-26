@@ -135,7 +135,7 @@ const HODDashboard = () => {
           return `<b>${item.name}</b><br/>Total: ₹${item.value.toLocaleString('en-IN')}`;
         }
       },
-      grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+      grid: { left: '10%', right: '10%', bottom: '15%', containLabel: true },
       xAxis: {
         type: 'category',
         data: monthNames,
@@ -165,7 +165,7 @@ const HODDashboard = () => {
           return `<b>${ev.name}</b><br/>Date: ${new Date(ev.date).toLocaleDateString()}<br/>Amount: <b>₹${ev.amount.toLocaleString('en-IN')}</b>`;
         }
       },
-      grid: { left: '3%', right: '4%', bottom: '30%', containLabel: true },
+      grid: { left: '8%', right: '8%', bottom: '30%', containLabel: true },
       xAxis: {
         type: 'category',
         data: recentEvents.map(e => e.name.substring(0, 15) + (e.name.length > 15 ? '...' : '')),
@@ -202,6 +202,7 @@ const HODDashboard = () => {
       series: [{
         type: 'pie',
         radius: ['40%', '70%'],
+        center: ['50%', '50%'],
         data: pieData,
         itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 }
       }]
@@ -216,7 +217,8 @@ const HODDashboard = () => {
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
       series: [{
         type: 'pie',
-        radius: ['60%', '85%'],
+        radius: ['55%', '75%'],
+        center: ['50%', '50%'],
         avoidLabelOverlap: false,
         label: { show: false, position: 'center' },
         emphasis: { label: { show: true, fontSize: '18', fontWeight: 'bold' } },
@@ -423,7 +425,7 @@ const HODDashboard = () => {
     <div className="page-container hod-dashboard-container">
       <PageHeader
         title="HOD Dashboard"
-        subtitle="Manage expenditures from your department"
+        subtitle="Overview of departmental budget allocation, proposals, and event expenditures"
       />
 
       <div className="stats-grid-4 mb-5">
@@ -455,42 +457,77 @@ const HODDashboard = () => {
         />
       </div>
 
-      <div className="charts-section mb-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-        <ContentCard title="Budget Utilization (Finalized)">
-          <div style={{ position: 'relative', height: '300px' }}>
-            <ReactECharts option={overallChartOption} style={{ height: '300px' }} />
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Utilized</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>
-                {dashboardData.stats.approved.value > 0
-                  ? Math.round((dashboardData.stats.utilized.value / dashboardData.stats.approved.value) * 100)
-                  : 0}%
+      <div className="charts-grid">
+        <div className="card-standard chart-card">
+          <div className="card-standard-header">
+            <h3>Budget Utilization (Finalized)</h3>
+            <p>Utilized vs Unexpended Budget</p>
+          </div>
+          <div className="chart-container" style={{ height: '380px' }}>
+            <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+              <ReactECharts option={overallChartOption} style={{ height: '100%', width: '100%' }} />
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Utilized</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>
+                  {dashboardData.stats.approved.value > 0
+                    ? Math.round((dashboardData.stats.utilized.value / dashboardData.stats.approved.value) * 100)
+                    : 0}%
+                </div>
               </div>
             </div>
           </div>
-        </ContentCard>
+        </div>
 
-        <ContentCard title="Expenditure Trend (Finalized)">
-          {hasBarData ? (
-            <ReactECharts option={barChartOption} style={{ height: '350px' }} />
-          ) : (
-            <div className="no-data-display p-5 text-center text-gray-500 flex flex-col items-center justify-center" style={{ height: '350px' }}>
-              <AlertCircle size={40} className="mb-2 opacity-20" />
-              <p>No finalized expenditure trend data available</p>
-            </div>
-          )}
-        </ContentCard>
+        <div className="card-standard chart-card">
+          <div className="card-standard-header">
+            <h3>Expenditure Trend (Finalized)</h3>
+            <p>Monthly spending pattern</p>
+          </div>
+          <div className="chart-container" style={{ height: '380px' }}>
+            {hasBarData ? (
+              <ReactECharts option={barChartOption} style={{ height: '100%', width: '100%' }} />
+            ) : (
+              <div className="no-data-display">
+                <AlertCircle size={40} />
+                <p>No finalized expenditure trend data available</p>
+              </div>
+            )}
+          </div>
+        </div>
 
-        <ContentCard title="Budget Head Utilization">
-          {hasPieData ? (
-            <ReactECharts option={pieChartOption} style={{ height: '350px' }} />
-          ) : (
-            <div className="no-data-display p-5 text-center text-gray-500 flex flex-col items-center justify-center" style={{ height: '350px' }}>
-              <Wallet size={40} className="mb-2 opacity-20" />
-              <p>No utilization data available</p>
-            </div>
-          )}
-        </ContentCard>
+        <div className="card-standard chart-card">
+          <div className="card-standard-header">
+            <h3>Budget Head Utilization</h3>
+            <p>Spending by category</p>
+          </div>
+          <div className="chart-container" style={{ height: '380px' }}>
+            {hasPieData ? (
+              <ReactECharts option={pieChartOption} style={{ height: '100%', width: '100%' }} />
+            ) : (
+              <div className="no-data-display">
+                <AlertCircle size={40} />
+                <p>No utilization data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card-standard chart-card">
+          <div className="card-standard-header">
+            <h3>Recent Event Expenditures</h3>
+            <p>Recent finalized event costs</p>
+          </div>
+          <div className="chart-container" style={{ height: '380px' }}>
+            {hasEventData ? (
+              <ReactECharts option={eventChartOption} style={{ height: '100%', width: '100%' }} />
+            ) : (
+              <div className="no-data-display">
+                <AlertCircle size={40} />
+                <p>No recent events data available</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (

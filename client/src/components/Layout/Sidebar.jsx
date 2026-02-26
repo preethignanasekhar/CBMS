@@ -24,7 +24,8 @@ import {
   Layers,
   BarChart3,
   Gauge,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Sparkles
 } from 'lucide-react';
 import './Sidebar.scss';
 
@@ -40,9 +41,9 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
   const getNavigationItems = () => {
     if (!user) return [];
 
+    const historyItem = { path: '/history', label: 'History', icon: <HistoryIcon size={20} /> };
     const baseItems = [
       { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-      { path: '/graphical-dashboard', label: 'Analytics', icon: <LineChart size={20} /> },
     ];
 
     switch (user.role) {
@@ -51,7 +52,9 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           ...baseItems,
           { path: '/users', label: 'Users', icon: <Users size={20} /> },
           { path: '/departments', label: 'Departments', icon: <Building2 size={20} /> },
+          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
           { path: '/settings', label: 'Settings', icon: <Settings size={20} /> },
+          historyItem
         ];
       case 'office':
         return [
@@ -60,12 +63,11 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           { path: '/categories', label: 'Categories', icon: <Layers size={20} /> },
           { path: '/allocations', label: 'Allocations', icon: <ClipboardList size={20} /> },
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
-          { path: '/consolidated-budget-report', label: 'Budget Report', icon: <BarChart3 size={20} /> },
           { path: '/budget-utilization-dashboard', label: 'Utilization Dashboard', icon: <Gauge size={20} /> },
-          { path: '/budget-proposal-report', label: 'Proposal Report', icon: <FileText size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           { path: '/consolidated-view', label: 'Consolidated View', icon: <TrendingUp size={20} /> },
           { path: '/year-comparison', label: 'Year Comparison', icon: <LineChart size={20} /> },
+          historyItem
         ];
       case 'department':
         return [
@@ -73,33 +75,36 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           { path: '/budget-proposals', label: 'Budget Proposals', icon: <FileText size={20} /> },
           { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
           { path: '/submit-expenditure', label: 'Submit Expenditure', icon: <PlusCircle size={20} /> },
+          historyItem
         ];
       case 'hod':
         return [
           { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/hod-analytics', label: 'Analytics', icon: <LineChart size={20} /> },
-          { path: '/hod-history', label: 'History', icon: <HistoryIcon size={20} /> },
+          { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
+          historyItem
         ];
       case 'vice_principal':
       case 'principal':
         return [
-          ...baseItems,
+          { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
           { path: '/budget-utilization-dashboard', label: 'Budget Dashboard', icon: <Gauge size={20} /> },
-          { path: '/consolidated-budget-report', label: 'Budget Report', icon: <BarChart3 size={20} /> },
-          { path: '/budget-proposal-report', label: 'Proposal Report', icon: <FileText size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           { path: '/consolidated-view', label: 'Consolidated View', icon: <TrendingUp size={20} /> },
           { path: '/year-comparison', label: 'Year Comparison', icon: <LineChart size={20} /> },
+          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
+          historyItem
         ];
       case 'auditor':
         return [
           ...baseItems,
           { path: '/audit-logs', label: 'Audit Logs', icon: <Search size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
+          historyItem
         ];
       default:
-        return baseItems;
+        return [...baseItems, historyItem];
     }
   };
 

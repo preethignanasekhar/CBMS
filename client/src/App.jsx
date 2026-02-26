@@ -12,11 +12,10 @@ import Dashboard from './pages/Dashboard';
 
 import HODDashboard from './pages/HODDashboard';
 import HODAnalytics from './pages/HODAnalytics';
-import HODHistory from './pages/HODHistory';
+import History from './pages/History';
 import OfficeDashboard from './pages/OfficeDashboard';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard';
-import GraphicalDashboard from './pages/GraphicalDashboard';
 
 
 import {
@@ -41,7 +40,6 @@ import {
   DepartmentUsers
 } from './pages/DepartmentModule';
 import Profile from './pages/Profile';
-import ConsolidatedBudgetReport from './pages/ConsolidatedBudgetReport';
 import {
   BudgetAllocations,
   BudgetHeads,
@@ -49,13 +47,13 @@ import {
   BudgetProposals,
   BudgetProposalForm,
   BudgetUtilizationDashboard,
-  BudgetProposalReport,
   AllocationForm
 } from './pages/BudgetModule';
 import {
   IncomeReceipts,
   IncomeForm
 } from './pages/IncomeModule';
+import BudgetHeadDetail from './pages/BudgetHeadDetail';
 import FinancialYearManagement from './pages/FinancialYearManagement';
 import './App.scss';
 
@@ -122,9 +120,7 @@ function App() {
                 <Route path="budget-proposals/add" element={<BudgetProposalForm />} />
                 <Route path="budget-proposals/edit/:id" element={<BudgetProposalForm />} />
                 <Route path="budget-proposals/:id" element={<BudgetProposalForm />} />
-                <Route path="consolidated-budget-report" element={<ConsolidatedBudgetReport />} />
                 <Route path="budget-utilization-dashboard" element={<BudgetUtilizationDashboard />} />
-                <Route path="budget-proposal-report" element={<BudgetProposalReport />} />
                 <Route path="approvals" element={<ApprovalsQueue />} />
                 <Route path="reports" element={<Reports />} />
 
@@ -141,7 +137,7 @@ function App() {
 
                 {/* HOD Routes */}
                 <Route path="hod-analytics" element={<HODAnalytics />} />
-                <Route path="hod-history" element={<HODHistory />} />
+                <Route path="history" element={<History />} />
                 <Route path="department-users" element={<DepartmentUsers />} />
 
                 {/* Management Routes */}
@@ -153,8 +149,8 @@ function App() {
 
                 {/* Common Routes */}
                 <Route path="notifications" element={<Notifications />} />
-                <Route path="graphical-dashboard" element={<GraphicalDashboard />} />
                 <Route path="department-detail/:id" element={<DepartmentDetail />} />
+                <Route path="budget-head-detail/:id" element={<BudgetHeadDetail />} />
                 <Route path="profile" element={<Profile />} />
               </Route>
 

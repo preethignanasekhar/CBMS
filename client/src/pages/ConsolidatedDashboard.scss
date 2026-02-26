@@ -180,69 +180,7 @@
   display: none;
 }
 
-/* Recent Activities */
-.recent-activities {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-backdrop);
-  border: var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  box-shadow: var(--glass-shadow);
-  height: fit-content;
-}
 
-.activity-item {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.activity-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary);
-  flex-shrink: 0;
-}
-
-.activity-title {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.95rem;
-}
-
-.activity-details {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
-.budget-head-breakdown {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-backdrop);
-  border: var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  box-shadow: var(--glass-shadow);
-  margin-top: 2rem;
-}
-
-.breakdown-table th {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.breakdown-table td {
-  padding: 1rem;
-  border-bottom: 1px solid var(--border-light);
-}
 
 /* Year Comparison Section */
 .year-comparison-section {

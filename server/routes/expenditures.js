@@ -32,7 +32,7 @@ router.get('/:id', getExpenditureById);
 
 // Submit expenditure (department users only)
 router.post('/',
-  authorize('department'),
+  authorize('department', 'hod'),
   handleFileUpload,
   attachFilesToBody,
   validateAttachments,
@@ -41,7 +41,7 @@ router.post('/',
 
 // Resubmit expenditure (department users only)
 router.post('/:id/resubmit',
-  authorize('department'),
+  authorize('department', 'hod'),
   handleFileUpload,
   attachFilesToBody,
   resubmitExpenditure

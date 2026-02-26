@@ -41,8 +41,7 @@ const incomeSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['expected', 'received', 'verified'],
-        default: 'expected',
-        index: true
+        default: 'expected'
     },
     referenceNumber: {
         type: String,

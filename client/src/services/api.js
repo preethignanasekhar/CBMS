@@ -102,6 +102,7 @@ export const departmentsAPI = {
 export const budgetHeadsAPI = {
   getBudgetHeads: (params) => api.get('/budget-heads', { params }),
   getBudgetHeadById: (id) => api.get(`/budget-heads/${id}`),
+  getBudgetHeadDetail: (id, params) => api.get(`/budget-heads/${id}/detail`, { params }),
   createBudgetHead: (data) => api.post('/budget-heads', data),
   updateBudgetHead: (id, data) => api.put(`/budget-heads/${id}`, data),
   deleteBudgetHead: (id) => api.delete(`/budget-heads/${id}`),
@@ -241,7 +242,6 @@ export const reportAPI = {
   getDashboardReport: (params) => api.get('/reports/dashboard', { params }),
   getBudgetProposalReport: (params) => api.get('/reports/proposals', { params }),
   getAuditReport: (params) => api.get('/reports/audit', { params }),
-  getConsolidatedBudgetReport: (params) => api.get('/consolidated-reports', { params }),
   getBudgetUtilizationDashboard: (params) => api.get('/consolidated-reports/utilization', { params }),
   getFundUtilizationTrend: (params) => api.get('/consolidated-reports/trend', { params }),
 };

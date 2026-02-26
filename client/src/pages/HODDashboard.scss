@@ -15,6 +15,17 @@
   }
 }
 
+.charts-grid {
+  @extend .charts-grid;
+}
+
+.chart-container {
+  height: 380px;
+  width: 100%;
+  position: relative;
+  padding-top: 1rem;
+}
+
 .approvals-section {
   margin-top: 2rem;
 

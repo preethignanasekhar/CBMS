@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
     allocationAPI,
@@ -25,6 +25,7 @@ import {
     Tooltip as RechartsTooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import './BudgetStyles.scss';
+import AIRequirementGenerator from '../components/AI/AIRequirementGenerator';
 
 export const BudgetAllocations = () => {
     const [allocations, setAllocations] = useState([]);
@@ -33,11 +34,12 @@ export const BudgetAllocations = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [searchParams] = useSearchParams();
     const [filters, setFilters] = useState({
-        search: '',
-        departmentId: '',
-        budgetHeadId: '',
-        financialYear: ''
+        search: searchParams.get('search') || '',
+        departmentId: searchParams.get('department') || '',
+        budgetHeadId: searchParams.get('budgetHead') || '',
+        financialYear: searchParams.get('financialYear') || ''
     });
 
     useEffect(() => {
@@ -531,6 +533,9 @@ export const BudgetHeadForm = () => {
 };
 
 export const BudgetHeads = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const isAdminOrOffice = user && (user.role === 'admin' || user.role === 'office');
     const [budgetHeads, setBudgetHeads] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -627,9 +632,11 @@ export const BudgetHeads = () => {
                 title="Budget Heads Management"
                 subtitle="Manage and allocate budget categories"
             >
-                <Link to="/budget-heads/add" className="btn btn-primary">
-                    <Plus size={18} /> Add Budget Head
-                </Link>
+                {isAdminOrOffice && (
+                    <Link to="/budget-heads/add" className="btn btn-primary">
+                        <Plus size={18} /> Add Budget Head
+                    </Link>
+                )}
             </PageHeader>
 
             {error && <div className="error-message">{error}</div>}
@@ -705,7 +712,7 @@ export const BudgetHeads = () => {
 
             <div className="budget-heads-grid">
                 {budgetHeads.map((head) => (
-                    <div key={head._id} className="budget-head-card">
+                    <div key={head._id} className="budget-head-card" onClick={() => navigate(`/budget-head-detail/${head._id}`)} style={{ cursor: 'pointer' }}>
                         <div className="card-header">
                             <div className="head-info">
                                 <h3 className="head-name">{head.name}</h3>
@@ -740,23 +747,39 @@ export const BudgetHeads = () => {
                             </div>
                         </div>
 
-                        <div className="card-actions">
-                            <Tooltip text="Edit Budget Head" position="top">
-                                <Link
-                                    to={`/budget-heads/edit/${head._id}`}
-                                    className="btn btn-sm btn-secondary"
-                                >
-                                    <Pencil size={16} /> Edit
-                                </Link>
-                            </Tooltip>
-                            <Tooltip text="Delete Budget Head" position="top">
-                                <button
-                                    className="btn btn-sm btn-danger"
-                                    onClick={() => handleDelete(head._id)}
-                                >
-                                    <Trash2 size={16} /> Delete
-                                </button>
-                            </Tooltip>
+                        <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+                            {isAdminOrOffice && (
+                                <>
+                                    <Tooltip text="View Allocations" position="top">
+                                        <Link
+                                            to={`/allocations?budgetHead=${head._id}`}
+                                            className="btn btn-sm btn-info"
+                                            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}
+                                        >
+                                            <Eye size={16} /> View
+                                        </Link>
+                                    </Tooltip>
+                                    <Tooltip text="Edit Budget Head" position="top">
+                                        <Link
+                                            to={`/budget-heads/edit/${head._id}`}
+                                            className="btn btn-sm btn-secondary"
+                                        >
+                                            <Pencil size={16} /> Edit
+                                        </Link>
+                                    </Tooltip>
+                                    <Tooltip text="Delete Budget Head" position="top">
+                                        <button
+                                            className="btn btn-sm btn-danger"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(head._id);
+                                            }}
+                                        >
+                                            <Trash2 size={16} /> Delete
+                                        </button>
+                                    </Tooltip>
+                                </>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -778,6 +801,7 @@ export const BudgetProposalForm = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { id } = useParams();
+    const location = useLocation();
     const isEditMode = !!id;
 
     const [departments, setDepartments] = useState([]);
@@ -932,6 +956,31 @@ export const BudgetProposalForm = () => {
     }, [formData.department, isEditMode]);
 
     // (moved) Auto-refresh hook will be defined after refreshAllStats to avoid temporal-deadzone
+
+    useEffect(() => {
+        if (!isEditMode && location.state) {
+            const { eventName, selectedItems } = location.state;
+            if (eventName || (selectedItems && selectedItems.length > 0)) {
+                let newNotes = formData.notes || '';
+
+                if (eventName) {
+                    newNotes = `Event: ${eventName}\n${newNotes}`;
+                }
+
+                if (selectedItems && selectedItems.length > 0) {
+                    const checklistText = `\nAI Suggested Requirements:\n- ${selectedItems.join('\n- ')}`;
+                    newNotes += checklistText;
+                }
+
+                setFormData(prev => ({
+                    ...prev,
+                    notes: newNotes
+                }));
+
+                setSuccess(`AI data for "${eventName || 'the event'}" loaded successfully.`);
+            }
+        }
+    }, [location.state, isEditMode]);
 
     useEffect(() => {
         if (isEditMode) {
@@ -1098,20 +1147,44 @@ export const BudgetProposalForm = () => {
 
     // Use a ref for the refresh function to keep the interval stable across renders
     const refreshAllStatsRef = useRef(refreshAllStats);
+
+    const handleAIRequirements = (data) => {
+        const { selectedItems, budgetSuggestions } = data;
+
+        // Map selected checklist items to proposal notes
+        if (selectedItems.length > 0) {
+            const checklistText = `\n\nAI Suggested Requirements:\n- ${selectedItems.join('\n- ')}`;
+            setFormData(prev => ({
+                ...prev,
+                notes: (prev.notes || '') + checklistText
+            }));
+            setSuccess(`AI successfully analyzed "${formData.eventName || 'the event'}" and added ${selectedItems.length} items to notes.`);
+        }
+    };
+    const formDataRef = useRef(formData);
+
     useEffect(() => {
         refreshAllStatsRef.current = refreshAllStats;
     }, [refreshAllStats]);
 
-    // Auto-refresh current year spent amounts every 30 seconds
     useEffect(() => {
+        formDataRef.current = formData;
+    }, [formData]);
+
+    // Auto-refresh current year spent amounts every 60 seconds
+    useEffect(() => {
+        // Only start the timer once per mounting
         const interval = setInterval(() => {
-            if (formData.department && formData.proposalItems.some(item => item.budgetHead)) {
+            // Use refs to get latest values without restarting the interval
+            const currentData = formDataRef.current;
+            if (currentData.department && currentData.proposalItems.some(item => item.budgetHead)) {
+                console.log('[Auto-Refresh] Triggering periodic stats update...');
                 refreshAllStatsRef.current();
             }
-        }, 30000); // 30 seconds
+        }, 60000); // Changed to 60s for better balance between freshness and performance
 
         return () => clearInterval(interval);
-    }, [formData.department]); // Only restart if department changes
+    }, []); // Totally stable interval
 
     const addItem = () => {
         setFormData(prev => ({
@@ -1326,6 +1399,8 @@ export const BudgetProposalForm = () => {
             <form onSubmit={handleSubmit} className="budget-proposal-form">
                 <div className="form-section">
                     <h3>Basic Information</h3>
+
+                    <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
 
                     <div className="form-row">
                         <div className="form-group">
@@ -1714,496 +1789,6 @@ export const BudgetProposalForm = () => {
                     </div>
                 )}
             </form>
-        </div>
-    );
-};
-export const BudgetProposalReport = () => {
-    const navigate = useNavigate();
-    const { user } = useAuth();
-    const [report, setReport] = useState(null);
-    const [departments, setDepartments] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [filters, setFilters] = useState({
-        financialYear: '2025-2026',
-        department: '',
-        status: ''
-    });
-    const [showApprovalDetailsModal, setShowApprovalDetailsModal] = useState(false);
-    const [approvalDetails, setApprovalDetails] = useState(null);
-    const [pendingAction, setPendingAction] = useState(null);
-    const [loadingStats, setLoadingStats] = useState(false);
-
-    const fetchDepartments = useCallback(async () => {
-        try {
-            const response = await departmentsAPI.getDepartments();
-            setDepartments(response.data.data.departments);
-        } catch (err) {
-            console.error('Error fetching departments:', err);
-        }
-    }, []);
-
-    const fetchReport = useCallback(async () => {
-        try {
-            setLoading(true);
-            const response = await reportAPI.getBudgetProposalReport(filters);
-            setReport(response.data.data);
-            setError(null);
-        } catch (err) {
-            setError('Failed to fetch budget proposal report');
-            console.error('Error fetching report:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [filters]);
-
-    useEffect(() => {
-        fetchDepartments();
-    }, [fetchDepartments]);
-
-    useEffect(() => {
-        fetchReport();
-    }, [fetchReport]);
-
-    const fetchApprovalDetails = async (proposal) => {
-        setLoadingStats(true);
-        try {
-            const today = new Date();
-            const currentMonth = today.getMonth() + 1;
-            const currentYear = today.getFullYear();
-            const actualCurrentFY = currentMonth >= 4 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
-
-            const proposalFY = proposal.financialYear;
-            const [proposalStart] = proposalFY.split('-');
-            const prevYearStart = (parseInt(proposalStart) - 2);
-            const prevFY = `${prevYearStart}-${parseInt(proposalStart) - 1}`;
-
-            const [currentDeptExpResponse, prevAllocResponse] = await Promise.all([
-                expenditureAPI.getExpenditures({
-                    department: proposal.department._id,
-                    financialYear: actualCurrentFY,
-                    limit: 2000
-                }),
-                allocationAPI.getAllocations({
-                    department: proposal.department._id,
-                    financialYear: prevFY
-                })
-            ]);
-
-            const currentDeptExpenditures = currentDeptExpResponse.data.data.expenditures || [];
-            const prevAllocations = prevAllocResponse.data.data.allocations || [];
-
-            const currentYearSpent = currentDeptExpenditures.reduce((sum, e) => {
-                const amount = parseFloat(e.billAmount) || 0;
-                return sum + amount;
-            }, 0);
-
-            const prevYearAllocated = prevAllocations.reduce((sum, a) => sum + (a.allocatedAmount || 0), 0);
-            const prevYearSpent = prevAllocations.reduce((sum, a) => sum + (a.spentAmount || 0), 0);
-            const prevYearBalance = prevYearAllocated - prevYearSpent;
-
-            setApprovalDetails({
-                proposal,
-                prevYearAllocated,
-                prevYearSpent,
-                prevYearBalance,
-                currentYearSpent
-            });
-            setShowApprovalDetailsModal(true);
-        } catch (err) {
-            console.error('Error fetching approval details:', err);
-            setError('Failed to fetch budget details');
-        } finally {
-            setLoadingStats(false);
-        }
-    };
-
-    const handleFilterChange = (e) => {
-        const { name, value } = e.target;
-        setFilters(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'approved': return <CheckCircle size={16} className="text-success" />;
-            case 'verified': return <ShieldCheck size={16} className="text-info" />;
-            case 'submitted': return <Clock size={16} className="text-primary" />;
-            case 'rejected': return <XCircle size={16} className="text-danger" />;
-            default: return <FileText size={16} className="text-secondary" />;
-        }
-    };
-
-    const exportToCSV = () => {
-        if (!report || !report.proposals) return;
-
-        let csv = 'Yearly Budget Proposal Report\n';
-        csv += `Financial Year: ${filters.financialYear}\n`;
-        csv += `Generated on: ${new Date().toLocaleString()}\n\n`;
-
-        csv += 'Department,Status,Total Proposed Amount,Items Count,Submitted Date\n';
-        report.proposals.forEach(p => {
-            csv += `"${p.department.name}",${p.status},${p.totalProposedAmount},${p.proposalItems.length},${p.submittedDate ? new Date(p.submittedDate).toLocaleDateString() : 'N/A'}\n`;
-        });
-
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `budget-proposals-${filters.financialYear}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-    };
-
-    return (
-        <div className="proposal-report-container">
-            <PageHeader
-                title="Yearly Budget Proposal Report"
-                subtitle="Consolidated view of proposed budgets for the upcoming year"
-            >
-                <div className="header-actions">
-                    <button className="btn btn-secondary" onClick={fetchReport}>
-                        <RotateCw size={18} /> Refresh
-                    </button>
-                    <button className="btn btn-primary" onClick={exportToCSV}>
-                        <Download size={18} /> Export CSV
-                    </button>
-                </div>
-            </PageHeader>
-
-            {error && <div className="error-message">{error}</div>}
-
-            <div className="filters-section">
-                <div className="form-group">
-                    <label>Financial Year</label>
-                    <input
-                        type="text"
-                        name="financialYear"
-                        value={filters.financialYear}
-                        onChange={handleFilterChange}
-                        placeholder="e.g., 2025-2026"
-                    />
-                </div>
-
-                <div className="form-group">
-                    <label>Department</label>
-                    <select name="department" value={filters.department} onChange={handleFilterChange}>
-                        <option value="">All Departments</option>
-                        {departments.map(dept => (
-                            <option key={dept._id} value={dept._id}>{dept.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="form-group">
-                    <label>Status</label>
-                    <select name="status" value={filters.status} onChange={handleFilterChange}>
-                        <option value="">All Status</option>
-                        <option value="draft">Draft</option>
-                        <option value="submitted">Submitted</option>
-                        <option value="verified">Verified</option>
-                        <option value="approved">Approved</option>
-                        <option value="rejected">Rejected</option>
-                    </select>
-                </div>
-
-                <button className="btn btn-primary" onClick={fetchReport} disabled={loading}>
-                    {loading ? 'Processing...' : 'Generate Summary'}
-                </button>
-            </div>
-
-            {report && (
-                <>
-                    <div className="stats-grid">
-                        <StatCard
-                            title="Total Proposals"
-                            value={report.summary.totalProposals}
-                            icon={<FileText size={24} />}
-                            color="var(--primary)"
-                        />
-                        <StatCard
-                            title="Approved"
-                            value={report.summary.byStatus.approved || 0}
-                            icon={<CheckCircle size={24} />}
-                            color="var(--success)"
-                        />
-                        <StatCard
-                            title="Pending Approval"
-                            value={(report.summary.byStatus.submitted || 0) + (report.summary.byStatus.verified || 0)}
-                            icon={<Clock size={24} />}
-                            color="var(--warning)"
-                        />
-                        <StatCard
-                            title="Total Proposed Amount"
-                            value={`₹${report.summary.totalProposedAmount.toLocaleString('en-IN')}`}
-                            icon={<FileText size={24} />}
-                            color="var(--info)"
-                        />
-                    </div>
-
-                    <div className="report-section">
-                        <div className="section-header">
-                            <h3>Proposal Breakdown by Department</h3>
-                        </div>
-                        <div className="table-responsive">
-                            <table className="report-table">
-                                <thead>
-                                    <tr>
-                                        <th>Department</th>
-                                        <th>Status</th>
-                                        <th className="text-right">Proposed Amount</th>
-                                        <th className="text-center">Items</th>
-                                        <th>Last Updated</th>
-                                        <th className="text-center">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {report.proposals.length > 0 ? report.proposals.map(p => (
-                                        <tr key={p._id}>
-                                            <td>
-                                                <div className="dept-info">
-                                                    <span className="font-bold">{p.department.name}</span>
-                                                    <span className="text-muted text-xs block">{p.department.code}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="status-badge">
-                                                    {getStatusIcon(p.status)}
-                                                    <span className={`status-text status-${p.status}`}>
-                                                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="text-right font-mono">
-                                                ₹{p.totalProposedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="text-center">{p.proposalItems.length}</td>
-                                            <td className="text-sm text-muted">
-                                                {new Date(p.updatedAt).toLocaleDateString()}
-                                            </td>
-                                            <td className="text-center">
-                                                {(p.status === 'submitted' || p.status === 'verified') && ['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
-                                                    <div className="action-buttons">
-                                                        <button
-                                                            className="btn-action approve"
-                                                            onClick={async () => {
-                                                                setPendingAction('approve');
-                                                                await fetchApprovalDetails(p);
-                                                            }}
-                                                            title="Approve"
-                                                            style={{ backgroundColor: '#28a745', color: 'white', marginRight: '4px' }}
-                                                        >
-                                                            <Check size={16} /> Approve
-                                                        </button>
-                                                        <button
-                                                            className="btn-action reject"
-                                                            onClick={async () => {
-                                                                setPendingAction('reject');
-                                                                await fetchApprovalDetails(p);
-                                                            }}
-                                                            title="Reject"
-                                                            style={{ backgroundColor: '#dc3545', color: 'white' }}
-                                                        >
-                                                            <X size={16} /> Reject
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {p.status === 'approved' && (
-                                                    <button
-                                                        className="btn-action allocate"
-                                                        onClick={() => navigate(`/allocations/add?proposalId=${p._id}&deptId=${p.department._id}&fy=${p.financialYear}`)}
-                                                        title="Promote to Allocation"
-                                                    >
-                                                        <ArrowUpRight size={16} /> Allocate
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan="5" className="text-center py-8 text-muted">No proposals found for the selected criteria</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Approval Details Modal */}
-            {showApprovalDetailsModal && approvalDetails && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000
-                }}>
-                    <div style={{
-                        backgroundColor: 'white',
-                        borderRadius: '8px',
-                        padding: '2rem',
-                        maxWidth: '600px',
-                        width: '90%',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h2>Budget Details for Approval</h2>
-                            <button
-                                onClick={() => {
-                                    setShowApprovalDetailsModal(false);
-                                    setPendingAction(null);
-                                    setApprovalDetails(null);
-                                }}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '1.5rem',
-                                    cursor: 'pointer',
-                                    color: '#666'
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <h3 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
-                                {approvalDetails.proposal.department.name}
-                            </h3>
-
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                gap: '1rem',
-                                padding: '1rem',
-                                background: 'rgba(var(--primary-rgb), 0.03)',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: '8px',
-                                marginBottom: '1rem'
-                            }}>
-                                <div style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                        Prev. Year Allocated Amount
-                                    </label>
-                                    <span style={{ fontWeight: '600', color: 'var(--primary)', fontSize: '1rem' }}>
-                                        ₹{(approvalDetails.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-
-                                <div style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                        Prev. Year Spent Amount
-                                    </label>
-                                    <span style={{ fontWeight: '600', color: 'var(--danger)', fontSize: '1rem' }}>
-                                        ₹{(approvalDetails.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-
-                                <div style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                        Prev. Year Balance (Remaining)
-                                    </label>
-                                    <span style={{ fontWeight: '600', color: 'var(--success)', fontSize: '1rem' }}>
-                                        ₹{(approvalDetails.prevYearBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-
-                                <div style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                        Current Year Spent Amount (Department)
-                                    </label>
-                                    <span style={{ fontWeight: '600', color: 'var(--warning)', fontSize: '1rem' }}>
-                                        ₹{(approvalDetails.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div style={{
-                                padding: '1rem',
-                                background: 'rgba(var(--info-rgb), 0.05)',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: '8px',
-                                marginBottom: '1rem'
-                            }}>
-                                <p style={{ margin: '0.5rem 0', color: 'var(--text-secondary)' }}>
-                                    <strong>Proposal Amount:</strong> ₹{(approvalDetails.proposal.totalProposedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                </p>
-                                <p style={{ margin: '0.5rem 0', color: 'var(--text-secondary)' }}>
-                                    <strong>Items:</strong> {approvalDetails.proposal.proposalItems.length}
-                                </p>
-                                <p style={{ margin: '0.5rem 0', color: 'var(--text-secondary)' }}>
-                                    <strong>Financial Year:</strong> {approvalDetails.proposal.financialYear}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                            <button
-                                onClick={() => {
-                                    setShowApprovalDetailsModal(false);
-                                    setPendingAction(null);
-                                    setApprovalDetails(null);
-                                }}
-                                className="btn btn-secondary"
-                                style={{ minWidth: '120px' }}
-                            >
-                                Cancel
-                            </button>
-                            {pendingAction === 'approve' && (
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            await budgetProposalAPI.approveBudgetProposal(approvalDetails.proposal._id, { notes: 'Approved from report' });
-                                            setShowApprovalDetailsModal(false);
-                                            setPendingAction(null);
-                                            setApprovalDetails(null);
-                                            fetchReport();
-                                        } catch (err) {
-                                            setError('Failed to approve proposal');
-                                            console.error('Error approving:', err);
-                                        }
-                                    }}
-                                    className="btn btn-success"
-                                    style={{ minWidth: '120px', color: 'white' }}
-                                >
-                                    <Check size={16} /> Confirm Approve
-                                </button>
-                            )}
-                            {pendingAction === 'reject' && (
-                                <button
-                                    onClick={() => {
-                                        const reason = prompt('Enter rejection reason:');
-                                        if (reason) {
-                                            budgetProposalAPI.rejectBudgetProposal(approvalDetails.proposal._id, { rejectionReason: reason }).then(() => {
-                                                setShowApprovalDetailsModal(false);
-                                                setPendingAction(null);
-                                                setApprovalDetails(null);
-                                                fetchReport();
-                                            }).catch(err => {
-                                                setError('Failed to reject proposal');
-                                                console.error('Error rejecting:', err);
-                                            });
-                                        }
-                                    }}
-                                    className="btn btn-danger"
-                                    style={{ minWidth: '120px', color: 'white' }}
-                                >
-                                    <X size={16} /> Confirm Reject
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

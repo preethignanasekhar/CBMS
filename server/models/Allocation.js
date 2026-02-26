@@ -79,7 +79,6 @@ allocationSchema.index({
 }, { unique: true });
 
 // Index for better query performance
-allocationSchema.index({ financialYear: 1 });
 allocationSchema.index({ department: 1 });
 allocationSchema.index({ budgetHead: 1 });
 

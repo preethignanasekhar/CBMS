@@ -1,0 +1,198 @@
+.event-budget-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-bottom: 2rem;
+}
+
+.event-budget-layout {
+    display: grid;
+    grid-template-columns: 620px 1fr;
+    gap: 2.5rem;
+    align-items: flex-start;
+
+    @media (max-width: 1200px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---------- LEFT PANEL ---------- */
+.event-budget-left {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+
+    .panel-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+        border: 1px solid #c7d2fe;
+        color: #4f46e5;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 6px 14px;
+        border-radius: 20px;
+        width: fit-content;
+
+        .sparkle {
+            color: #6366f1;
+        }
+    }
+
+    .ai-requirement-generator {
+        max-width: 100%;
+        width: 100%;
+        margin-bottom: 0;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.08);
+        border: 1px solid #e0e7ff;
+    }
+}
+
+/* ---------- RIGHT PANEL ---------- */
+.event-budget-right {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: sticky;
+    top: 2rem;
+}
+
+.how-it-works-card {
+    background: #ffffff;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+
+    .how-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 0.75rem;
+
+        h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .lightbulb {
+            color: #f59e0b;
+        }
+    }
+
+    .how-subtitle {
+        font-size: 0.95rem;
+        color: #64748b;
+        margin: 0 0 2rem;
+        line-height: 1.5;
+    }
+
+    .steps-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .step-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        position: relative;
+
+        &:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 17px;
+            top: 40px;
+            bottom: -20px;
+            width: 2px;
+            background: #f1f5f9;
+        }
+
+        .step-icon-wrapper {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #6366f1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+
+        .step-content {
+            h4 {
+                margin: 0 0 4px;
+                font-size: 0.95rem;
+                font-weight: 700;
+                color: #334155;
+            }
+
+            p {
+                margin: 0;
+                font-size: 0.87rem;
+                color: #64748b;
+                line-height: 1.5;
+            }
+        }
+    }
+}
+
+.tip-card {
+    background: linear-gradient(to right, #fffbeb, #ffffff);
+    border-radius: 16px;
+    border: 1px solid #fef3c7;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .tip-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #b45309;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    p {
+        margin: 0;
+        font-size: 0.87rem;
+        color: #92400e;
+        line-height: 1.5;
+    }
+}
+
+.goto-proposals-btn {
+    width: 100%;
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    color: #475569;
+    padding: 12px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #1e293b;
+        transform: translateY(-1px);
+    }
+}

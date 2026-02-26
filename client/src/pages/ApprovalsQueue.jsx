@@ -33,10 +33,14 @@ const ApprovalsQueue = () => {
 
       const propParams = { ...filters };
       if (filters.status === 'pending_approval') {
-        // Special mapping for budgetProposalAPI.getBudgetProposals to hit our new controller logic
-        if (user.role === 'hod') propParams.status = 'submitted';
-        else if (['principal', 'vice_principal'].includes(user.role)) propParams.status = 'verified_by_hod';
-        else if (user.role === 'office') propParams.status = 'verified_by_principal';
+        const adminRoles = ['principal', 'vice_principal', 'office', 'admin'];
+        if (adminRoles.includes(user.role)) {
+          // Admins see all submitted/active items in the queue to avoid "empty" views
+          filters.status = 'all';
+          propParams.status = 'all';
+        } else if (user.role === 'hod') {
+          propParams.status = 'submitted';
+        }
       } else {
         propParams.status = getPropStatus();
       }

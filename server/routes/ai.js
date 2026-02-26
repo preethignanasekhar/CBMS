@@ -12,7 +12,8 @@ const {
     getYearComparison,
     getInsights,
     getSystemHealth,
-    getDashboardSummary
+    getDashboardSummary,
+    analyzeEvent
 } = require('../controllers/aiController');
 
 // Import auth middleware
@@ -41,5 +42,8 @@ router.get('/insights', authorize('admin', 'office', 'principal', 'vice_principa
 
 // System health (admin only)
 router.get('/health', authorize('admin'), getSystemHealth);
+
+// Event requirement analysis (all authenticated users can use this for planning)
+router.post('/analyze-event', authorize('admin', 'office', 'hod', 'department', 'officer', 'principal', 'vice_principal'), analyzeEvent);
 
 module.exports = router;

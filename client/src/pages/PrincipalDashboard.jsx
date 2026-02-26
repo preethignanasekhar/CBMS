@@ -20,6 +20,7 @@ import {
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
 import StatusBadge from '../components/Common/StatusBadge';
+import FloatingAIChat from '../components/AI/FloatingAIChat';
 import './HODDashboard.scss'; // Reusing HOD dashboard styles for consistency
 
 const PrincipalDashboard = () => {
@@ -220,12 +221,12 @@ const PrincipalDashboard = () => {
                         <button onClick={() => navigate('/consolidated-view')} className="btn btn-secondary flex items-center gap-2">
                             <ShieldCheck size={18} /> Consolidated View
                         </button>
-                        <button onClick={() => navigate('/graphical-dashboard')} className="btn btn-secondary flex items-center gap-2">
-                            <TrendingUp size={18} /> Visual Analytics
-                        </button>
                     </div>
                 </div>
             </div>
+
+            {/* AI Chat Integration */}
+            <FloatingAIChat />
         </div>
     );
 };

@@ -62,11 +62,18 @@ const getExpenditures = async (req, res) => {
       // Standard filtering
       if (req.user.role === 'department' || req.user.role === 'hod') {
         query.department = req.user.department;
-      } else if (department) {
+      } else if (department && department !== 'undefined' && department !== 'all') {
         query.department = department;
       }
 
-      if (status) query.status = status;
+      // Default status for admins should include all non-draft statuses
+      if (!status || status === 'all') {
+        if (['principal', 'vice_principal', 'office', 'admin'].includes(req.user.role)) {
+          query.status = { $in: ['pending', 'verified', 'approved', 'finalized', 'rejected'] };
+        }
+      } else {
+        query.status = status;
+      }
     }
 
     if (budgetHead) query.budgetHead = budgetHead;
@@ -132,7 +139,7 @@ const getExpenditureById = async (req, res) => {
     }
 
     // Check if user can access this expenditure
-    if (req.user.role === 'department' && expenditure.department._id.toString() !== req.user.department.toString()) {
+    if ((req.user.role === 'department' || req.user.role === 'hod') && expenditure.department._id.toString() !== req.user.department.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You can only view your department expenditures.'

@@ -572,6 +572,149 @@ const getCurrentFinancialYear = () => {
     return `${year - 1}-${year}`;
 };
 
+const axios = require('axios');
+
+/**
+ * Feature 7: Intelligent Event Requirement Analysis
+ * Communicates with the Python AI service to analyze event descriptions.
+ * 
+ * @param {string} eventName - Name of the event
+ * @param {string} eventDescription - Free-text description of the event
+ * @returns {Object} Analysis result with checklist and follow-ups
+ */
+/**
+ * Fallback AI Analysis logic (Node.js based)
+ * Used when the Python AI service is unavailable.
+ */
+const fallbackAnalyzeEvent = (eventName, eventDescription) => {
+    const combinedText = `${eventName} ${eventDescription}`.toLowerCase();
+    const detectedComponents = [];
+    const followUps = [];
+    let nextQuestion = null;
+
+    const keywords = {
+        "Resource Person / Chief Guest": ["guest", "speaker", "expert", "resource person", "chief guest", "lecturer", "trainer", "special guest", "keynote", "mentor", "judge"],
+        "Event Venue": ["auditorium", "seminar hall", "outdoor", "ground", "hall", "room", "venue", "stadium", "conference room", "classroom", "lab", "theatre"],
+        "Sound System": ["audio", "speaker", "mic", "microphone", "sound", "pa system", "amplifier", "handheld mic", "collar mic", "podium mic"],
+        "Stage Setup": ["stage", "podium", "backdrop", "dais", "decoration", "lighting", "screen setup", "banner stand", "table cloths", "frills"],
+        "Printing": ["banner", "certificate", "poster", "brochure", "pamphlet", "invitation", "printing", "flex banner", "flyer", "notepads", "pen", "documents"],
+        "Food": ["lunch", "dinner", "meal", "buffet", "catering", "food", "lunch packets", "working lunch", "non-veg", "veg"],
+        "Refreshments": ["snacks", "tea", "coffee", "high tea", "breakfast", "refreshments", "biscuits", "water bottles", "juice", "cool drinks"],
+        "Decorations": ["flower", "bouquet", "carpet", "lighting", "ribbon", "decor", "shamiana", "scenery", "stage decoration", "balloons", "welcome arch"],
+        "Technical Equipment": ["projector", "laptop", "wifi", "internet", "computer", "system", "screen", "pointer", "extension box", "ups", "generator", "hdmi"],
+        "Transportation": ["bus", "car", "taxi", "travel", "transport", "pickup", "drop", "van", "commute", "fuel", "driver allowance", "conveyance"],
+        "Accommodation": ["stay", "hotel", "room", "lodging", "accommodation", "guest house", "hostel", "dormitory", "boarding"],
+        "Photography & Video": ["photo", "video", "camera", "photography", "videography", "media", "drone", "event coverage", "live stream"],
+        "Registration Kit": ["registration", "kit", "bag", "file", "folder", "id card", "badge", "tag", "lanyard", "enrollment"],
+        "Mementos & Gifts": ["memento", "gift", "trophy", "medal", "shawl", "presents", "award", "prize", "momento", "souvenir", "certificate frame"],
+        "Logistic Support": ["security", "cleaning", "housekeeping", "manpower", "volunteers", "student coordinators", "helpers", "labor"]
+    };
+
+    for (const [component, kws] of Object.entries(keywords)) {
+        if (kws.some(kw => combinedText.includes(kw))) {
+            detectedComponents.push(component);
+        }
+    }
+
+    const isWorkshop = ["workshop", "training", "hands-on", "bootcamp", "practical"].some(kw => combinedText.includes(kw));
+    const isGuestEvent = ["guest", "speaker", "expert", "lecturer", "resource", "keynote"].some(kw => combinedText.includes(kw));
+    const isConference = ["conference", "symposium", "seminar", "summit", "meetup", "conclave"].some(kw => combinedText.includes(kw));
+
+    // Conversational Logic & Follow-ups
+    if (isWorkshop) {
+        if (!detectedComponents.includes("Event Venue")) detectedComponents.push("Event Venue");
+        if (!detectedComponents.includes("Refreshments")) detectedComponents.push("Refreshments");
+        if (!detectedComponents.includes("Technical Equipment")) detectedComponents.push("Technical Equipment");
+        if (!detectedComponents.includes("Printing")) detectedComponents.push("Printing");
+
+        // Specific Software Logic
+        if (combinedText.includes("software") || combinedText.includes("tool") || combinedText.includes("app")) {
+            if (!combinedText.includes("installed") && !combinedText.includes("yes") && !combinedText.includes("no")) {
+                nextQuestion = "Is the specific software required for this workshop already installed on the computers?";
+            } else if (combinedText.includes("no") && !combinedText.includes("payed") && !combinedText.includes("paid") && !combinedText.includes("free")) {
+                nextQuestion = "Understood. Will this be a paid licensed software or is it open-source/free?";
+            } else if (combinedText.includes("paid") || combinedText.includes("payed")) {
+                if (!detectedComponents.includes("Software License")) detectedComponents.push("Software License");
+                nextQuestion = "Got it. I've added 'Software License' to your checklist. Anything else about technical setup?";
+            }
+        } else {
+            nextQuestion = "Great choice! For this workshop, will you be using any specific software or technical tools?";
+        }
+
+        followUps.push({
+            trigger: "Workshop detected",
+            question: "Need budget for Printing notepads, pens and training kits?",
+            category: "Printing",
+            itemToAdd: "Stationery (Notepads/Pens)"
+        });
+    }
+
+    if (isConference) {
+        ["Photography & Video", "Mementos & Gifts", "Registration Kit"].forEach(item => {
+            if (!detectedComponents.includes(item)) detectedComponents.push(item);
+        });
+    }
+
+    if (isGuestEvent && !nextQuestion) {
+        followUps.push({
+            trigger: "Guest speaker detected",
+            question: "Should we include a Bouquet, Shawl and Memento for the guest?",
+            category: "Mementos & Gifts",
+            itemToAdd: "Guest Welcome Kit (Shawl/Bouquet)"
+        });
+        nextQuestion = "For the guest speaker, would you like to arrange a formal welcome kit (Shawl/Bouquet)?";
+    }
+
+    const budgetSuggestions = [];
+    if (detectedComponents.includes("Food") || detectedComponents.includes("Refreshments")) budgetSuggestions.push("Catering & Refreshments");
+    if (detectedComponents.includes("Printing")) budgetSuggestions.push("Printing & Stationery");
+    if (detectedComponents.includes("Technical Equipment")) budgetSuggestions.push("Technical Expenses");
+    if (detectedComponents.includes("Software License")) budgetSuggestions.push("Technical Expenses");
+    if (isGuestEvent) budgetSuggestions.push("Guest Remuneration");
+
+    return {
+        status: 'success',
+        isFallback: true,
+        analysis: {
+            eventName,
+            detectedComponents: detectedComponents,
+            durationDays: 1,
+            isWorkshop,
+            isGuestEvent
+        },
+        checklist: [...new Set(detectedComponents)],
+        followUps,
+        budgetSuggestions: [...new Set(budgetSuggestions)],
+        nextQuestion: nextQuestion || (detectedComponents.length > 0 ? "I've suggested some items based on your event. Does this look good, or should we add more?" : "Could you tell me a bit more about what you'll need for this event?")
+    };
+};
+
+/**
+ * Feature 7: Intelligent Event Requirement Analysis
+ * Communicates with the Python AI service to analyze event descriptions.
+ * 
+ * @param {string} eventName - Name of the event
+ * @param {string} eventDescription - Free-text description of the event
+ * @returns {Object} Analysis result with checklist and follow-ups
+ */
+const analyzeEventRequirements = async (eventName, eventDescription) => {
+    try {
+        const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+
+        console.log(`[AI-Event] Analyzing event: "${eventName}" via ${pythonServiceUrl}`);
+
+        const response = await axios.post(`${pythonServiceUrl}/analyze-event`, {
+            eventName,
+            eventDescription
+        });
+
+        return response.data;
+    } catch (error) {
+        console.error('Error calling AI Event Analysis service, using Node.js fallback:', error.message);
+        return fallbackAnalyzeEvent(eventName, eventDescription);
+    }
+};
+
 module.exports = {
     detectAnomalies,
     calculateRiskScores,
@@ -579,5 +722,6 @@ module.exports = {
     generateYearComparison,
     generateExplanation,
     detectRuleViolations,
-    getCurrentFinancialYear
+    getCurrentFinancialYear,
+    analyzeEventRequirements
 };

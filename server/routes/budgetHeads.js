@@ -6,7 +6,8 @@ const {
   createBudgetHead,
   updateBudgetHead,
   deleteBudgetHead,
-  getBudgetHeadStats
+  getBudgetHeadStats,
+  getBudgetHeadDetail
 } = require('../controllers/budgetHeadController');
 const { verifyToken, authorize } = require('../middleware/auth');
 
@@ -16,6 +17,7 @@ router.use(verifyToken);
 // Allow all authorized users to view budget heads
 router.get('/stats', getBudgetHeadStats);
 router.get('/', getBudgetHeads);
+router.get('/:id/detail', getBudgetHeadDetail);
 router.get('/:id', getBudgetHeadById);
 
 // Admin only routes for modification
