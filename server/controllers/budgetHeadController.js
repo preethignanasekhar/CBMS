@@ -234,6 +234,26 @@ const deleteBudgetHead = async (req, res) => {
       });
     }
 
+    // Check if budget head has expenditures
+    const Expenditure = require('../models/Expenditure');
+    const expendituresCount = await Expenditure.countDocuments({ budgetHead: budgetHeadId });
+    if (expendituresCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete budget head with existing expenditures'
+      });
+    }
+
+    // Check if budget head has budget proposals
+    const BudgetProposal = require('../models/BudgetProposal');
+    const proposalsCount = await BudgetProposal.countDocuments({ 'proposalItems.budgetHead': budgetHeadId });
+    if (proposalsCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete budget head with existing budget proposals'
+      });
+    }
+
     const budgetHead = await BudgetHead.findByIdAndDelete(budgetHeadId);
     if (!budgetHead) {
       return res.status(404).json({

@@ -13,7 +13,7 @@ import Dashboard from './pages/Dashboard';
 import HODDashboard from './pages/HODDashboard';
 import HODAnalytics from './pages/HODAnalytics';
 import History from './pages/History';
-import OfficeDashboard from './pages/OfficeDashboard';
+
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard';
 
@@ -71,9 +71,6 @@ const DashboardWrapper = () => {
     return <HODDashboard />;
   }
 
-  if (user.role === 'office') {
-    return <OfficeDashboard />;
-  }
 
   if (['principal', 'vice_principal'].includes(user.role)) {
     return <PrincipalDashboard />;

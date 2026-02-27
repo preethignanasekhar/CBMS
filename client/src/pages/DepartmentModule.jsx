@@ -485,7 +485,11 @@ export const DepartmentDetail = () => {
                     type: 'value',
                     name: 'Amount (₹)',
                     axisLabel: {
-                        formatter: (value) => `₹${(value / 1000).toFixed(0)}K`
+                        formatter: (value) => {
+                            if (value === 0) return '₹0';
+                            const kValue = value / 1000;
+                            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
+                        }
                     }
                 },
                 {

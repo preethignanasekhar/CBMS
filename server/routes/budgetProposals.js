@@ -38,7 +38,7 @@ router.put('/:id', authorize('hod', 'department_staff', 'department'), updateBud
 router.put('/:id/submit', authorize('hod', 'department_staff', 'department'), submitBudgetProposal);
 
 // Delete proposal (only draft/rejected proposals)
-router.delete('/:id', authorize('hod', 'department_staff', 'department', 'admin'), deleteBudgetProposal);
+router.delete('/:id', authorize('hod', 'department_staff', 'department', 'admin', 'office'), deleteBudgetProposal);
 
 // Approve proposal (admin/principal/vice principal/office)
 router.put('/:id/approve', authorize('admin', 'principal', 'vice_principal', 'office'), approveBudgetProposal);

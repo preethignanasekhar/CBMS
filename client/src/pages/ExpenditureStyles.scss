@@ -735,13 +735,6 @@
 .ai-planner-sticky {
   position: sticky;
   top: 1.5rem;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 1.25rem;
-  padding: 1.25rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
   animation: slideInRight 0.5s ease-out;
 }
 

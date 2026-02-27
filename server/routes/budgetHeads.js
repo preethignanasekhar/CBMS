@@ -20,9 +20,9 @@ router.get('/', getBudgetHeads);
 router.get('/:id/detail', getBudgetHeadDetail);
 router.get('/:id', getBudgetHeadById);
 
-// Admin only routes for modification
-router.post('/', authorize('admin'), createBudgetHead);
-router.put('/:id', authorize('admin'), updateBudgetHead);
-router.delete('/:id', authorize('admin'), deleteBudgetHead);
+// Admin, office, and management/department routes for modification
+router.post('/', authorize('admin', 'office', 'principal', 'vice_principal', 'hod', 'department'), createBudgetHead);
+router.put('/:id', authorize('admin', 'office', 'principal', 'vice_principal', 'hod', 'department'), updateBudgetHead);
+router.delete('/:id', authorize('admin', 'office', 'principal', 'vice_principal', 'hod', 'department'), deleteBudgetHead);
 
 module.exports = router;

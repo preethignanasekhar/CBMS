@@ -18,7 +18,7 @@ import {
     Tag, AlertCircle, Save, AlignLeft, Hash, ArrowLeft, Eye, CheckCircle,
     XCircle, Clock, DollarSign, Send, Check, RefreshCcw, ShieldCheck,
     TrendingUp, TrendingDown, FileText, RotateCw, Download, ArrowUpRight, Search,
-    AlertTriangle
+    AlertTriangle, Sparkles
 } from 'lucide-react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -118,13 +118,11 @@ export const BudgetAllocations = () => {
     }
 
     return (
-        <div className="budget-allocations-container">
-            <div className="allocations-header">
-                <h1>Budget Allocations Management</h1>
-                <Link to="/allocations/add" className="btn btn-primary">
-                    <Plus size={18} /> Add Allocation
-                </Link>
-            </div>
+        <div className="page-container budget-allocations-container">
+            <PageHeader
+                title="Budget Allocations Management"
+                subtitle="Manage and monitor budget allocations across departments"
+            />
 
             {error && (
                 <div className="error-message">
@@ -174,16 +172,7 @@ export const BudgetAllocations = () => {
             )}
 
             <div className="filters-section">
-                <div className="filter-group">
-                    <input
-                        type="text"
-                        placeholder="Search allocations..."
-                        name="search"
-                        value={filters.search}
-                        onChange={handleFilterChange}
-                        className="filter-input"
-                    />
-                </div>
+
                 <div className="filter-group">
                     <select
                         name="departmentId"
@@ -235,60 +224,26 @@ export const BudgetAllocations = () => {
                             <th>Allocated Amount</th>
                             <th>Spent Amount</th>
                             <th>Remaining</th>
-                            <th>Utilization</th>
-                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {allocations.map((allocation) => {
-                            const utilization = getUtilizationPercentage(allocation.allocatedAmount, allocation.spentAmount);
                             return (
                                 <tr key={allocation._id}>
                                     <td>
                                         <div className="department-info">
                                             <span className="dept-name">{allocation.departmentName}</span>
-                                            <span className="dept-code">{allocation.departmentId}</span>
                                         </div>
                                     </td>
                                     <td>
                                         <div className="budget-head-info">
                                             <span className="head-name">{allocation.budgetHeadName}</span>
-                                            <span className="head-code">{allocation.budgetHeadCode}</span>
                                         </div>
                                     </td>
                                     <td>{allocation.financialYear}</td>
                                     <td className="amount">₹{allocation.allocatedAmount?.toLocaleString() || '0'}</td>
                                     <td className="amount">₹{allocation.spentAmount?.toLocaleString() || '0'}</td>
                                     <td className="amount">₹{allocation.remainingAmount?.toLocaleString() || '0'}</td>
-                                    <td>
-                                        <div className="utilization-bar">
-                                            <div className="utilization-fill" style={{
-                                                width: `${utilization}%`,
-                                                backgroundColor: getUtilizationColor(utilization)
-                                            }}></div>
-                                            <span className="utilization-text">{utilization}%</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="action-buttons">
-                                            <Tooltip text="Edit Allocation" position="top">
-                                                <Link
-                                                    to={`/allocations/edit/${allocation._id}`}
-                                                    className="btn btn-sm btn-secondary"
-                                                >
-                                                    <Pencil size={16} />
-                                                </Link>
-                                            </Tooltip>
-                                            <Tooltip text="Delete Allocation" position="top">
-                                                <button
-                                                    className="btn btn-sm btn-danger"
-                                                    onClick={() => handleDelete(allocation._id)}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </Tooltip>
-                                        </div>
-                                    </td>
                                 </tr>
                             );
                         })}
@@ -535,7 +490,7 @@ export const BudgetHeadForm = () => {
 export const BudgetHeads = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const isAdminOrOffice = user && (user.role === 'admin' || user.role === 'office');
+    const canManage = user && ['admin', 'office', 'principal', 'vice_principal', 'hod', 'department'].includes(user.role);
     const [budgetHeads, setBudgetHeads] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -607,7 +562,7 @@ export const BudgetHeads = () => {
                 fetchBudgetHeads();
                 fetchStats();
             } catch (err) {
-                setError('Failed to delete budget head');
+                setError(err.response?.data?.message || 'Failed to delete budget head');
                 console.error('Error deleting budget head:', err);
             }
         }
@@ -632,7 +587,7 @@ export const BudgetHeads = () => {
                 title="Budget Heads Management"
                 subtitle="Manage and allocate budget categories"
             >
-                {isAdminOrOffice && (
+                {canManage && (
                     <Link to="/budget-heads/add" className="btn btn-primary">
                         <Plus size={18} /> Add Budget Head
                     </Link>
@@ -671,16 +626,7 @@ export const BudgetHeads = () => {
             )}
 
             <div className="filters-section">
-                <div className="filter-group">
-                    <input
-                        type="text"
-                        placeholder="Search budget heads..."
-                        name="search"
-                        value={filters.search}
-                        onChange={handleFilterChange}
-                        className="filter-input"
-                    />
-                </div>
+
                 <div className="filter-group">
                     <select
                         name="category"
@@ -748,7 +694,7 @@ export const BudgetHeads = () => {
                         </div>
 
                         <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                            {isAdminOrOffice && (
+                            {canManage && (
                                 <>
                                     <Tooltip text="View Allocations" position="top">
                                         <Link
@@ -850,7 +796,7 @@ export const BudgetProposalForm = () => {
 
             console.log(`[Stats] Fetching for Prop: ${proposalFY}, Actual Cur: ${actualCurrentFY}, Prev: ${prevFY}`);
 
-            // Fetch allocations for previous year (specific budget head) 
+            // Fetch allocations for previous year (specific budget head)
             // and actual expenditures for current year (DEPARTMENT TOTAL)
             const [currentDepartmentExpResponse, prevAllocResponse] = await Promise.all([
                 expenditureAPI.getExpenditures({
@@ -1158,7 +1104,7 @@ export const BudgetProposalForm = () => {
                 ...prev,
                 notes: (prev.notes || '') + checklistText
             }));
-            setSuccess(`AI successfully analyzed "${formData.eventName || 'the event'}" and added ${selectedItems.length} items to notes.`);
+            setSuccess(`AI successfully analyzed "${data.eventName || 'the requirements'}" and added ${selectedItems.length} items to notes.`);
         }
     };
     const formDataRef = useRef(formData);
@@ -1327,7 +1273,7 @@ export const BudgetProposalForm = () => {
     }
 
     return (
-        <div className="budget-proposal-form-container">
+        <div className="budget-proposal-page-container">
             <PageHeader
                 title={isEditMode ? 'Edit Budget Proposal' : 'Create Budget Proposal'}
                 subtitle="Propose budget requirements for your department"
@@ -1396,399 +1342,407 @@ export const BudgetProposalForm = () => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="budget-proposal-form">
-                <div className="form-section">
-                    <h3>Basic Information</h3>
-
-                    <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
-
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>Financial Year <span className="required">*</span></label>
-                            <input
-                                type="text"
-                                name="financialYear"
-                                value={formData.financialYear}
-                                onChange={handleInputChange}
-                                placeholder="e.g., 2025-2026"
-                                required
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label>Department <span className="required">*</span></label>
-                            <select
-                                name="department"
-                                value={formData.department}
-                                onChange={handleInputChange}
-                                required
-                                disabled={isEditMode || ['department', 'hod', 'officer', 'vp', 'p'].includes(user?.role)}
-                            >
-                                <option value="">Select Department</option>
-                                {departments.map(dept => (
-                                    <option key={dept._id} value={dept._id}>
-                                        {dept.name} ({dept.code})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Notes</label>
-                        <textarea
-                            name="notes"
-                            value={formData.notes}
-                            onChange={handleInputChange}
-                            placeholder="Additional notes for the proposal"
-                            rows="3"
-                            disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                            style={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
-                        />
-                    </div>
-                </div>
-
-                <div className="form-section">
-                    <div className="section-header">
-                        <h3>Proposal Items</h3>
-                        <button
-                            type="button"
-                            className="btn btn-sm btn-primary"
-                            onClick={addItem}
-                        >
-                            <Plus size={16} /> Add Item
-                        </button>
-                    </div>
-
-                    {formData.proposalItems.map((item, index) => (
-                        <div key={index} className="proposal-item">
-                            <div className="item-header">
-                                <h4>Item {index + 1}</h4>
-                                {formData.proposalItems.length > 1 && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-sm btn-danger"
-                                        onClick={() => removeItem(index)}
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                )}
-                            </div>
+            <div className="budget-proposal-layout">
+                <div className="proposal-form-column">
+                    <form onSubmit={handleSubmit} className="budget-proposal-form">
+                        <div className="form-section">
+                            <h3>Basic Information</h3>
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label>Budget Head <span className="required">*</span></label>
-                                    <select
-                                        value={item.budgetHead}
-                                        onChange={(e) => handleItemChange(index, 'budgetHead', e.target.value)}
+                                    <label>Financial Year <span className="required">*</span></label>
+                                    <input
+                                        type="text"
+                                        name="financialYear"
+                                        value={formData.financialYear}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g., 2025-2026"
                                         required
-                                        disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Department <span className="required">*</span></label>
+                                    <select
+                                        name="department"
+                                        value={formData.department}
+                                        onChange={handleInputChange}
+                                        required
+                                        disabled={isEditMode || ['department', 'hod', 'officer', 'vp', 'p'].includes(user?.role)}
                                     >
-                                        <option value="">Select Budget Head</option>
-                                        {budgetHeads.map(head => (
-                                            <option key={head._id} value={head._id}>
-                                                {head.name} ({head.category})
+                                        <option value="">Select Department</option>
+                                        {departments.map(dept => (
+                                            <option key={dept._id} value={dept._id}>
+                                                {dept.name} ({dept.code})
                                             </option>
                                         ))}
                                     </select>
                                 </div>
-
-                                <div className="form-group">
-                                    <label>Proposed Amount (₹) <span className="required">*</span></label>
-                                    <input
-                                        type="number"
-                                        value={item.proposedAmount}
-                                        onChange={(e) => handleItemChange(index, 'proposedAmount', e.target.value)}
-                                        placeholder="0"
-                                        min="0"
-                                        step="0.01"
-                                        required
-                                        disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                    />
-                                </div>
-
-                                <div className="form-group stats-group" style={{ flex: '1 1 100%', marginTop: '0.5rem' }}>
-                                    <div className="expenditure-stats" style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                        gap: '1rem',
-                                        padding: '1rem',
-                                        background: 'rgba(var(--primary-rgb), 0.03)',
-                                        border: '1px border var(--border-color)',
-                                        borderRadius: '8px',
-                                        fontSize: '0.9rem'
-                                    }}>
-                                        <div className="stat-item">
-                                            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                Prev. Year Allocated Amount
-                                            </label>
-                                            <span style={{ fontWeight: '600', color: 'var(--primary)', fontSize: '1rem' }}>
-                                                ₹{(item.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                        <div className="stat-item">
-                                            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                Prev. Year Spent Amount
-                                            </label>
-                                            <span style={{ fontWeight: '600', color: 'var(--danger)', fontSize: '1rem' }}>
-                                                ₹{(item.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                        <div className="stat-item">
-                                            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                Prev. Year Balance (Remaining)
-                                            </label>
-                                            <span style={{ fontWeight: '600', color: 'var(--success)', fontSize: '1rem' }}>
-                                                ₹{(((item.prevYearAllocated || 0) - (item.prevYearSpent || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                        <div className="stat-item">
-                                            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                Current Year Spent Amount (Department)
-                                            </label>
-                                            <span style={{ fontWeight: '600', color: 'var(--warning)', fontSize: '1rem' }}>
-                                                ₹{(item.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                        <div className="stat-item">
-                                            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                Prev. Year Utilization (To be saved)
-                                            </label>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>₹</span>
-                                                <input
-                                                    type="number"
-                                                    value={item.previousYearUtilization}
-                                                    onChange={(e) => handleItemChange(index, 'previousYearUtilization', e.target.value)}
-                                                    placeholder="0"
-                                                    min="0"
-                                                    step="0.01"
-                                                    disabled={['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                                    style={{
-                                                        height: '32px',
-                                                        padding: '4px 8px',
-                                                        width: '120px',
-                                                        border: '1px solid var(--border-color)',
-                                                        borderRadius: '4px',
-                                                        opacity: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 0.6 : 1,
-                                                        cursor: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 'not-allowed' : 'auto'
-                                                    }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
                             <div className="form-group">
-                                <label>Justification <span className="required">*</span></label>
+                                <label>Notes</label>
                                 <textarea
-                                    value={item.justification}
-                                    onChange={(e) => handleItemChange(index, 'justification', e.target.value)}
-                                    placeholder="Explain why this budget is needed"
+                                    name="notes"
+                                    value={formData.notes}
+                                    onChange={handleInputChange}
+                                    placeholder="Additional notes for the proposal"
                                     rows="3"
-                                    required
-                                    disabled={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                    style={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
+                                    disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                    style={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
                                 />
                             </div>
                         </div>
-                    ))}
 
-                    <div className="total-proposed">
-                        <strong>Total Proposed Amount: ₹{getTotalProposedAmount().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                    </div>
-                </div>
-
-                <div className="form-actions">
-                    <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => navigate('/budget-proposals')}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => handleSubmit(null, 'draft')}
-                        disabled={loading}
-                    >
-                        <Save size={18} /> {loading ? 'Saving...' : isEditMode ? 'Update Draft' : 'Save as Draft'}
-                    </button>
-                    {['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) && isEditMode && (
-                        <button
-                            type="button"
-                            className="btn btn-info"
-                            onClick={handleOpenApprovalModal}
-                            disabled={loadingStats}
-                            style={{ color: 'white' }}
-                        >
-                            {loadingStats ? 'Loading...' : 'View All Departments Stats'}
-                        </button>
-                    )}
-
-                    {/* Quick Approve/Verify buttons in Form */}
-                    {isEditMode && (
-                        <>
-                            {user?.role === 'hod' && formData.status === 'submitted' && (
+                        <div className="form-section">
+                            <div className="section-header">
+                                <h3>Proposal Items</h3>
                                 <button
                                     type="button"
-                                    className="btn btn-primary"
-                                    onClick={async () => {
-                                        if (window.confirm('Are you sure you want to verify this proposal?')) {
-                                            await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified from detail view' });
-                                            navigate('/budget-proposals');
-                                        }
-                                    }}
-                                    style={{ color: 'white' }}
+                                    className="btn btn-sm btn-primary"
+                                    onClick={addItem}
                                 >
-                                    <ShieldCheck size={18} /> Verify Proposal
-                                </button>
-                            )}
-                            {['principal', 'vice_principal'].includes(user?.role) && formData.status === 'verified' && (
-                                <button
-                                    type="button"
-                                    className="btn btn-primary"
-                                    onClick={async () => {
-                                        if (window.confirm('Are you sure you want to verify and accept this proposal?')) {
-                                            await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified & Accepted from detail view' });
-                                            navigate('/budget-proposals');
-                                        }
-                                    }}
-                                    style={{ color: 'white' }}
-                                >
-                                    <ShieldCheck size={18} /> Verify & Accept
-                                </button>
-                            )}
-                            {user?.role === 'office' && formData.status === 'verified' && (
-                                <button
-                                    type="button"
-                                    className="btn btn-success"
-                                    onClick={async () => {
-                                        if (window.confirm('Are you sure you want to allocate and approve this proposal?')) {
-                                            await budgetProposalAPI.approveBudgetProposal(id, { notes: 'Approved from detail view' });
-                                            navigate('/budget-proposals');
-                                        }
-                                    }}
-                                    style={{ color: 'white' }}
-                                >
-                                    <Check size={18} /> Allocate & Approve
-                                </button>
-                            )}
-                        </>
-                    )}
-                    <button
-                        type="button"
-                        className="btn btn-success"
-                        onClick={() => handleSubmit(null, 'submitted')}
-                        disabled={loading}
-                        style={{ color: 'white' }}
-                    >
-                        <Send size={18} /> {loading ? 'Submitting...' : 'Save & Submit'}
-                    </button>
-                </div>
-
-                {/* Approval Modal for viewing all departments' stats */}
-                {showApprovalModal && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1000
-                    }}>
-                        <div style={{
-                            backgroundColor: 'white',
-                            borderRadius: '8px',
-                            padding: '2rem',
-                            maxWidth: '90%',
-                            maxHeight: '90vh',
-                            overflowY: 'auto',
-                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h2>All Departments - Budget Statistics</h2>
-                                <button
-                                    onClick={() => setShowApprovalModal(false)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        fontSize: '1.5rem',
-                                        cursor: 'pointer',
-                                        color: '#666'
-                                    }}
-                                >
-                                    ×
+                                    <Plus size={16} /> Add Item
                                 </button>
                             </div>
 
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                                gap: '1.5rem'
-                            }}>
-                                {allDepartmentsStats.map((deptStat) => (
-                                    <div key={deptStat.departmentId} style={{
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: '8px',
-                                        padding: '1.5rem',
-                                        background: 'rgba(var(--primary-rgb), 0.02)'
-                                    }}>
-                                        <h4 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
-                                            {deptStat.departmentName} ({deptStat.departmentCode})
-                                        </h4>
+                            {formData.proposalItems.map((item, index) => (
+                                <div key={index} className="proposal-item">
+                                    <div className="item-header">
+                                        <h4>Item {index + 1}</h4>
+                                        {formData.proposalItems.length > 1 && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-danger"
+                                                onClick={() => removeItem(index)}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Allocated Amount</span>
-                                                <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                                                    ₹{(deptStat.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                </span>
-                                            </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Budget Head <span className="required">*</span></label>
+                                            <select
+                                                value={item.budgetHead}
+                                                onChange={(e) => handleItemChange(index, 'budgetHead', e.target.value)}
+                                                required
+                                                disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                            >
+                                                <option value="">Select Budget Head</option>
+                                                {budgetHeads.map(head => (
+                                                    <option key={head._id} value={head._id}>
+                                                        {head.name} ({head.category})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
 
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Spent Amount</span>
-                                                <span style={{ fontWeight: '600', color: 'var(--danger)' }}>
-                                                    ₹{(deptStat.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                </span>
-                                            </div>
+                                        <div className="form-group">
+                                            <label>Proposed Amount (₹) <span className="required">*</span></label>
+                                            <input
+                                                type="number"
+                                                value={item.proposedAmount}
+                                                onChange={(e) => handleItemChange(index, 'proposedAmount', e.target.value)}
+                                                placeholder="0"
+                                                min="0"
+                                                step="0.01"
+                                                required
+                                                disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                            />
+                                        </div>
 
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Balance (Remaining)</span>
-                                                <span style={{ fontWeight: '600', color: 'var(--success)' }}>
-                                                    ₹{(deptStat.prevYearBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                </span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Current Year Spent Amount</span>
-                                                <span style={{ fontWeight: '600', color: 'var(--warning)' }}>
-                                                    ₹{(deptStat.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                </span>
+                                        <div className="form-group stats-group" style={{ flex: '1 1 100%', marginTop: '0.5rem' }}>
+                                            <div className="expenditure-stats" style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                                gap: '1rem',
+                                                padding: '1rem',
+                                                background: 'rgba(var(--primary-rgb), 0.03)',
+                                                border: '1px border var(--border-color)',
+                                                borderRadius: '8px',
+                                                fontSize: '0.9rem'
+                                            }}>
+                                                <div className="stat-item">
+                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
+                                                        Prev. Year Allocated Amount
+                                                    </label>
+                                                    <span style={{ fontWeight: '600', color: 'var(--primary)', fontSize: '1rem' }}>
+                                                        ₹{(item.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </div>
+                                                <div className="stat-item">
+                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
+                                                        Prev. Year Spent Amount
+                                                    </label>
+                                                    <span style={{ fontWeight: '600', color: 'var(--danger)', fontSize: '1rem' }}>
+                                                        ₹{(item.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </div>
+                                                <div className="stat-item">
+                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
+                                                        Prev. Year Balance (Remaining)
+                                                    </label>
+                                                    <span style={{ fontWeight: '600', color: 'var(--success)', fontSize: '1rem' }}>
+                                                        ₹{(((item.prevYearAllocated || 0) - (item.prevYearSpent || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </div>
+                                                <div className="stat-item">
+                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
+                                                        Current Year Spent Amount (Department)
+                                                    </label>
+                                                    <span style={{ fontWeight: '600', color: 'var(--warning)', fontSize: '1rem' }}>
+                                                        ₹{(item.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </div>
+                                                <div className="stat-item">
+                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
+                                                        Prev. Year Utilization (To be saved)
+                                                    </label>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ color: 'var(--text-secondary)' }}>₹</span>
+                                                        <input
+                                                            type="number"
+                                                            value={item.previousYearUtilization}
+                                                            onChange={(e) => handleItemChange(index, 'previousYearUtilization', e.target.value)}
+                                                            placeholder="0"
+                                                            min="0"
+                                                            step="0.01"
+                                                            disabled={['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                                            style={{
+                                                                height: '32px',
+                                                                padding: '4px 8px',
+                                                                width: '120px',
+                                                                border: '1px solid var(--border-color)',
+                                                                borderRadius: '4px',
+                                                                opacity: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 0.6 : 1,
+                                                                cursor: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 'not-allowed' : 'auto'
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
 
-                            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-                                <button
-                                    onClick={() => setShowApprovalModal(false)}
-                                    className="btn btn-secondary"
-                                >
-                                    Close
-                                </button>
+                                    <div className="form-group">
+                                        <label>Justification <span className="required">*</span></label>
+                                        <textarea
+                                            value={item.justification}
+                                            onChange={(e) => handleItemChange(index, 'justification', e.target.value)}
+                                            placeholder="Explain why this budget is needed"
+                                            rows="3"
+                                            required
+                                            disabled={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                            style={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+
+                            <div className="total-proposed">
+                                <strong>Total Proposed Amount: ₹{getTotalProposedAmount().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                             </div>
                         </div>
+
+                        <div className="form-actions">
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => navigate('/budget-proposals')}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => handleSubmit(null, 'draft')}
+                                disabled={loading}
+                            >
+                                <Save size={18} /> {loading ? 'Saving...' : isEditMode ? 'Update Draft' : 'Save as Draft'}
+                            </button>
+                            {['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) && isEditMode && (
+                                <button
+                                    type="button"
+                                    className="btn btn-info"
+                                    onClick={handleOpenApprovalModal}
+                                    disabled={loadingStats}
+                                    style={{ color: 'white' }}
+                                >
+                                    {loadingStats ? 'Loading...' : 'View All Departments Stats'}
+                                </button>
+                            )}
+
+                            {/* Quick Approve/Verify buttons in Form */}
+                            {user && ['admin', 'office', 'principal', 'vice_principal', 'hod', 'department'].includes(user.role) && (
+                                <>
+                                    {user?.role === 'hod' && formData.status === 'submitted' && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary"
+                                            onClick={async () => {
+                                                if (window.confirm('Are you sure you want to verify this proposal?')) {
+                                                    await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified from detail view' });
+                                                    navigate('/budget-proposals');
+                                                }
+                                            }}
+                                            style={{ color: 'white' }}
+                                        >
+                                            <ShieldCheck size={18} /> Verify Proposal
+                                        </button>
+                                    )}
+                                    {['principal', 'vice_principal'].includes(user?.role) && formData.status === 'verified' && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary"
+                                            onClick={async () => {
+                                                if (window.confirm('Are you sure you want to verify and accept this proposal?')) {
+                                                    await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified & Accepted from detail view' });
+                                                    navigate('/budget-proposals');
+                                                }
+                                            }}
+                                            style={{ color: 'white' }}
+                                        >
+                                            <ShieldCheck size={18} /> Verify & Accept
+                                        </button>
+                                    )}
+                                    {user?.role === 'office' && formData.status === 'verified' && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-success"
+                                            onClick={async () => {
+                                                if (window.confirm('Are you sure you want to allocate and approve this proposal?')) {
+                                                    await budgetProposalAPI.approveBudgetProposal(id, { notes: 'Approved from detail view' });
+                                                    navigate('/budget-proposals');
+                                                }
+                                            }}
+                                            style={{ color: 'white' }}
+                                        >
+                                            <Check size={18} /> Allocate & Approve
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                            <button
+                                type="button"
+                                className="btn btn-success"
+                                onClick={() => handleSubmit(null, 'submitted')}
+                                disabled={loading}
+                                style={{ color: 'white' }}
+                            >
+                                <Send size={18} /> {loading ? 'Submitting...' : 'Save & Submit'}
+                            </button>
+                        </div>
+
+                        {/* Approval Modal for viewing all departments' stats */}
+                        {showApprovalModal && (
+                            <div style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 1000
+                            }}>
+                                <div style={{
+                                    backgroundColor: 'white',
+                                    borderRadius: '8px',
+                                    padding: '2rem',
+                                    maxWidth: '90%',
+                                    maxHeight: '90vh',
+                                    overflowY: 'auto',
+                                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                        <h2>All Departments - Budget Statistics</h2>
+                                        <button
+                                            onClick={() => setShowApprovalModal(false)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                fontSize: '1.5rem',
+                                                cursor: 'pointer',
+                                                color: '#666'
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                                        gap: '1.5rem'
+                                    }}>
+                                        {allDepartmentsStats.map((deptStat) => (
+                                            <div key={deptStat.departmentId} style={{
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: '8px',
+                                                padding: '1.5rem',
+                                                background: 'rgba(var(--primary-rgb), 0.02)'
+                                            }}>
+                                                <h4 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
+                                                    {deptStat.departmentName} ({deptStat.departmentCode})
+                                                </h4>
+
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Allocated Amount</span>
+                                                        <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
+                                                            ₹{(deptStat.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Spent Amount</span>
+                                                        <span style={{ fontWeight: '600', color: 'var(--danger)' }}>
+                                                            ₹{(deptStat.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Prev. Year Balance (Remaining)</span>
+                                                        <span style={{ fontWeight: '600', color: 'var(--success)' }}>
+                                                            ₹{(deptStat.prevYearBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Current Year Spent Amount</span>
+                                                        <span style={{ fontWeight: '600', color: 'var(--warning)' }}>
+                                                            ₹{(deptStat.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+                                        <button
+                                            onClick={() => setShowApprovalModal(false)}
+                                            className="btn btn-secondary"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </form>
+                </div>
+
+                <div className="ai-planner-column">
+                    <div className="ai-planner-sticky">
+                        <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
                     </div>
-                )}
-            </form>
+                </div>
+            </div>
         </div>
     );
 };

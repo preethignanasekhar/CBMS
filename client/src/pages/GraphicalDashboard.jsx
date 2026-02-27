@@ -136,7 +136,11 @@ const GraphicalDashboard = () => {
       yAxis: {
         type: 'value',
         axisLabel: {
-          formatter: (value) => `₹${(value / 1000).toFixed(0)}K`
+          formatter: (value) => {
+            if (value === 0) return '₹0';
+            const kValue = value / 1000;
+            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
+          }
         }
       },
       series: [
@@ -242,7 +246,11 @@ const GraphicalDashboard = () => {
       yAxis: {
         type: 'value',
         axisLabel: {
-          formatter: (value) => `₹${(value / 1000).toFixed(0)}K`
+          formatter: (value) => {
+            if (value === 0) return '₹0';
+            const kValue = value / 1000;
+            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
+          }
         }
       },
       series: [{
@@ -328,7 +336,11 @@ const GraphicalDashboard = () => {
       yAxis: {
         type: 'value',
         axisLabel: {
-          formatter: (value) => `₹${(value / 1000).toFixed(0)}K`
+          formatter: (value) => {
+            if (value === 0) return '₹0';
+            const kValue = value / 1000;
+            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
+          }
         }
       },
       series: [
@@ -522,7 +534,7 @@ const GraphicalDashboard = () => {
           </div>
 
           {/* Year-over-Year Comparison */}
-          {user.role !== 'department' && (
+          {!['department', 'hod'].includes(user.role) && (
             <div className="card-standard chart-card full-width">
               <div className="card-standard-header">
                 <h3>Year-over-Year Spending Comparison</h3>

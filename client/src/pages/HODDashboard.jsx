@@ -141,7 +141,16 @@ const HODDashboard = () => {
         data: monthNames,
         axisLabel: { color: '#374151', fontWeight: '600' }
       },
-      yAxis: { type: 'value', axisLabel: { formatter: (v) => `₹${v / 1000}k` } },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: (v) => {
+            if (v === 0) return '₹0';
+            const kValue = v / 1000;
+            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
+          }
+        }
+      },
       series: [{
         name: 'Spending',
         type: 'line',
@@ -196,6 +205,8 @@ const HODDashboard = () => {
       value: bhBreakdown[name].spent,
       name: name
     })).filter(item => item.value > 0);
+
+    setHasPieData(pieData.length > 0);
 
     setPieChartOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', confine: true },

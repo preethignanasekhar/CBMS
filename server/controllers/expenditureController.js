@@ -166,6 +166,7 @@ const getExpenditureById = async (req, res) => {
 const submitExpenditure = async (req, res) => {
   try {
     let {
+      department,
       budgetHead,
       eventName,
       eventType,
@@ -173,6 +174,19 @@ const submitExpenditure = async (req, res) => {
       description,
       expenseItems
     } = req.body;
+
+    // Resolve department: use body department if user is management, else use user's own department
+    let departmentId = req.user.department;
+    if (['admin', 'office', 'principal', 'vice_principal'].includes(req.user.role) && department) {
+      departmentId = department;
+    }
+
+    if (!departmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Department is required for this request'
+      });
+    }
 
     // Handle JSON string if sent via FormData
     if (typeof expenseItems === 'string') {
@@ -217,7 +231,7 @@ const submitExpenditure = async (req, res) => {
 
     // Check if allocation exists
     const allocation = await Allocation.findOne({
-      department: req.user.department,
+      department: departmentId,
       budgetHead,
       financialYear
     });
@@ -242,7 +256,7 @@ const submitExpenditure = async (req, res) => {
     }
 
     const expenditure = await Expenditure.create([{
-      department: req.user.department,
+      department: departmentId,
       budgetHead,
       eventName,
       eventType,
@@ -269,7 +283,7 @@ const submitExpenditure = async (req, res) => {
       details: {
         eventName,
         totalAmount,
-        department: req.user.department
+        department: departmentId
       },
       newValues: expenditure[0]
     });

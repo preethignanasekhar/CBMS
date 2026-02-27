@@ -61,7 +61,7 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           ...baseItems,
           { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
           { path: '/categories', label: 'Categories', icon: <Layers size={20} /> },
-          { path: '/allocations', label: 'Allocations', icon: <ClipboardList size={20} /> },
+
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
           { path: '/budget-utilization-dashboard', label: 'Utilization Dashboard', icon: <Gauge size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },

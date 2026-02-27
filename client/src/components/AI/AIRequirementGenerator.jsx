@@ -7,7 +7,7 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
     const [messages, setMessages] = useState([
         {
             id: '1',
-            text: "Hello! I'm your AI Budget Assistant. What event are you planning today?",
+            text: "Hello! I'm your AI Planning Assistant. What event are you planning today?",
             sender: 'ai',
             type: 'text'
         }

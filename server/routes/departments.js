@@ -21,8 +21,8 @@ router.get('/:id/detail', getDepartmentDetail);
 router.get('/', authorize('admin', 'principal', 'vice_principal', 'office', 'auditor', 'hod', 'department'), getDepartments);
 router.get('/stats', authorize('admin', 'principal', 'vice_principal', 'office', 'auditor'), getDepartmentStats);
 
-// All other routes require admin access
-router.use(authorize('admin'));
+// Modification routes require admin or office access
+router.use(authorize('admin', 'office'));
 router.get('/:id', getDepartmentById);
 router.post('/', createDepartment);
 router.put('/:id', updateDepartment);

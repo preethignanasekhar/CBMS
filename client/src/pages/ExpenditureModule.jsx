@@ -6,7 +6,8 @@ import {
     budgetHeadsAPI,
     allocationAPI,
     settingsAPI,
-    categoriesAPI
+    categoriesAPI,
+    departmentsAPI
 } from '../services/api';
 import {
     Send,
@@ -116,7 +117,13 @@ export const Expenditures = () => {
             <PageHeader
                 title="My Expenditures"
                 subtitle="Track and manage your department's expenditure requests"
-            />
+            >
+                {['department', 'hod', 'admin', 'office'].includes(user.role) && (
+                    <button className="btn btn-primary" onClick={() => navigate('/submit-expenditure')}>
+                        <Plus size={18} /> Create Event Budget
+                    </button>
+                )}
+            </PageHeader>
 
             <div className="filters-section">
                 <div className="filter-group search-group">
@@ -169,7 +176,7 @@ export const Expenditures = () => {
                         <div className="empty-icon"><FileText size={48} /></div>
                         <h3>No Events Found</h3>
                         <p>You haven&apos;t submitted any event budgets matching your criteria.</p>
-                        {user.role !== 'hod' && (
+                        {['department', 'hod', 'admin', 'office'].includes(user.role) && (
                             <button className="btn btn-primary" onClick={() => navigate('/submit-expenditure')}>
                                 Create Event Budget
                             </button>
@@ -343,6 +350,7 @@ export const SubmitExpenditure = () => {
 
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
+        departmentId: user?.department?._id || user?.department || '',
         budgetHeadId: '',
         eventName: '',
         eventType: '',
@@ -359,6 +367,8 @@ export const SubmitExpenditure = () => {
         }]
     });
 
+    const [departments, setDepartments] = useState([]);
+
     const [budgetHeads, setBudgetHeads] = useState([]);
     const [categories, setCategories] = useState([]);
     const [allocations, setAllocations] = useState([]);
@@ -368,16 +378,47 @@ export const SubmitExpenditure = () => {
     const [overspendPolicy, setOverspendPolicy] = useState('disallow');
 
     useEffect(() => {
-        if (user?.role !== 'department' && user?.role !== 'hod') {
+        const allowedRoles = ['department', 'hod', 'admin', 'office', 'principal', 'vice_principal', 'coordinator', 'coordinater'];
+        if (!user && !localStorage.getItem('user')) {
+            // Wait for user to load if not in local storage
+            return;
+        }
+        if (user && !allowedRoles.includes(user.role)) {
             navigate('/dashboard');
             return;
         }
 
         fetchBudgetHeads();
         fetchCategories();
-        fetchAllocations();
+        if (['admin', 'office', 'principal', 'vice_principal'].includes(user?.role)) {
+            fetchDepartments();
+        }
         fetchSettings();
     }, [user, navigate]);
+
+    useEffect(() => {
+        if (user?.department && !formData.departmentId) {
+            const deptId = typeof user.department === 'object' ? user.department._id : user.department;
+            setFormData(prev => ({ ...prev, departmentId: deptId }));
+        }
+    }, [user, formData.departmentId]);
+
+    useEffect(() => {
+        if (formData.departmentId) {
+            fetchAllocations();
+        } else {
+            setAllocations([]);
+        }
+    }, [formData.departmentId]);
+
+    const fetchDepartments = async () => {
+        try {
+            const response = await departmentsAPI.getDepartments();
+            setDepartments(response.data.data.departments);
+        } catch (error) {
+            console.error('Error fetching departments:', error);
+        }
+    };
 
     const fetchCategories = async () => {
         try {
@@ -415,7 +456,7 @@ export const SubmitExpenditure = () => {
             const currentYear = getCurrentFinancialYear();
             const response = await allocationAPI.getAllocations({
                 financialYear: currentYear,
-                department: user.department?._id || user.department,
+                department: formData.departmentId,
                 limit: 1000
             });
             setAllocations(response.data.data.allocations);
@@ -499,15 +540,38 @@ export const SubmitExpenditure = () => {
     };
 
     const calculateTotal = () => {
-        return formData.expenseItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        if (!formData.expenseItems) return 0;
+        return formData.expenseItems.reduce((acc, item) => acc + (parseFloat(item?.amount) || 0), 0);
     };
 
     const validateStep1 = () => {
         const newErrors = {};
-        if (!formData.eventName.trim()) newErrors.eventName = 'Event name is required';
-        if (!formData.eventType) newErrors.eventType = 'Event type is required';
-        if (!formData.eventDate) newErrors.eventDate = 'Event date is required';
-        if (!formData.budgetHeadId) newErrors.budgetHeadId = 'Budget head is required';
+
+        // Resolve departmentId: check formData first, then user object
+        let effectiveDeptId = formData.departmentId;
+        if (!effectiveDeptId && user?.department) {
+            effectiveDeptId = typeof user.department === 'object' ? user.department._id : user.department;
+            // Sync it back to formData for consistency in Step 2/3
+            setFormData(prev => ({ ...prev, departmentId: effectiveDeptId }));
+        }
+
+        const isManagement = ['admin', 'office', 'principal', 'vice_principal'].includes(user?.role);
+
+        if (isManagement && !effectiveDeptId) {
+            newErrors.departmentId = 'Department selection is required.';
+        } else if (!effectiveDeptId) {
+            newErrors.departmentId = 'Configuration Error: No department found for your account.';
+        }
+
+        if (!formData.eventName.trim()) newErrors.eventName = 'Event name is required.';
+        if (!formData.eventType) newErrors.eventType = 'Event type is required.';
+        if (!formData.eventDate) newErrors.eventDate = 'Event date is required.';
+        if (!formData.budgetHeadId) newErrors.budgetHeadId = 'Budget head is required.';
+
+        if (Object.keys(newErrors).length > 0) {
+            console.warn('[Step 1 Validation Failed]', newErrors);
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -531,9 +595,22 @@ export const SubmitExpenditure = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const nextStep = () => {
-        if (step === 1 && validateStep1()) setStep(2);
-        else if (step === 2 && validateStep2()) setStep(3);
+    const nextStep = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        console.log('[NextStep] Current Step:', step);
+        if (step === 1 && validateStep1()) {
+            setStep(2);
+            window.scrollTo(0, 0);
+        } else if (step === 2 && validateStep2()) {
+            setStep(3);
+            window.scrollTo(0, 0);
+        }
+    };
+
+    const prevStep = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        setStep(prev => Math.max(1, prev - 1));
+        window.scrollTo(0, 0);
     };
 
     const handleAIRequirements = (data) => {
@@ -557,6 +634,7 @@ export const SubmitExpenditure = () => {
 
         try {
             const submissionData = new FormData();
+            submissionData.append('department', formData.departmentId);
             submissionData.append('budgetHead', formData.budgetHeadId);
             submissionData.append('eventName', formData.eventName);
             submissionData.append('eventType', formData.eventType);
@@ -616,205 +694,238 @@ export const SubmitExpenditure = () => {
                     </div>
 
                     <div className="expenditure-form-container card-standard">
-                        {errors.submit && <div className="alert alert-danger mb-4">{errors.submit}</div>}
+                        {!user ? (
+                            <div className="loading py-5 text-center">Loading your profile...</div>
+                        ) : (
+                            <>
+                                {errors.submit && <div className="alert alert-danger mb-4">{errors.submit}</div>}
 
-                        {step === 1 && (
-                            <div className="form-step">
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label>Event Name *</label>
-                                        <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} placeholder="e.g. Annual Tech Symposium" className={errors.eventName ? 'error' : ''} />
-                                        {errors.eventName && <span className="form-error">{errors.eventName}</span>}
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Event Type *</label>
-                                        <select name="eventType" value={formData.eventType} onChange={handleEventChange} className={errors.eventType ? 'error' : ''}>
-                                            <option value="">Select Type</option>
-                                            <option value="Seminar">Seminar</option>
-                                            <option value="Workshop">Workshop</option>
-                                            <option value="Association">Association</option>
-                                            <option value="Research">Research</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                        {errors.eventType && <span className="form-error">{errors.eventType}</span>}
-                                    </div>
-                                </div>
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label>Event Date *</label>
-                                        <input type="date" name="eventDate" value={formData.eventDate} onChange={handleEventChange} className={errors.eventDate ? 'error' : ''} />
-                                        {errors.eventDate && <span className="form-error">{errors.eventDate}</span>}
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Budget Head *</label>
-                                        <select name="budgetHeadId" value={formData.budgetHeadId} onChange={handleEventChange} className={errors.budgetHeadId ? 'error' : ''}>
-                                            <option value="">Select Budget Head</option>
-                                            {budgetHeads.map(head => (
-                                                <option key={head._id} value={head._id}>{head.name}</option>
-                                            ))}
-                                        </select>
-                                        {errors.budgetHeadId && <span className="form-error">{errors.budgetHeadId}</span>}
-                                        {formData.budgetHeadId && (
-                                            <span className={`form-help ${remainingBudget === 0 ? 'text-danger' : 'text-success'}`} style={{ fontWeight: remainingBudget === 0 ? 'bold' : 'normal' }}>
-                                                {remainingBudget === 0
-                                                    ? `No allocation found for this head in ${getCurrentFinancialYear()}`
-                                                    : `Available Balance: ${formatCurrency(remainingBudget)}`}
-                                            </span>
+                                {step === 1 && (
+                                    <div className="form-step">
+                                        {errors.departmentId && !['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
+                                            <div className="alert alert-danger mb-4">
+                                                <AlertCircle size={18} /> {errors.departmentId}
+                                            </div>
                                         )}
-                                    </div>
-                                </div>
-                                <div className="form-group">
-                                    <label>General Description</label>
-                                    <textarea name="description" value={formData.description} onChange={handleEventChange} rows="3" placeholder="Brief about the event..."></textarea>
-                                </div>
-                                <div className="form-actions" style={{ justifyContent: 'flex-end' }}>
-                                    <button className="btn btn-primary" onClick={nextStep}>
-                                        Next: Add Items <ChevronRight size={16} />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 2 && (
-                            <div className="form-step">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                    <h3>Expense Items</h3>
-                                    <button className="btn btn-outline btn-sm" onClick={addItem}><Plus size={16} /> Add Item</button>
-                                </div>
-
-                                {errors.budget && <div className="alert alert-danger mb-3">{errors.budget}</div>}
-
-                                <div className="items-scroll-area" style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '1rem' }}>
-                                    {formData.expenseItems.map((item, idx) => (
-                                        <div key={idx} className="expense-item-card mb-4" style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px', background: '#fdfdfd', position: 'relative' }}>
-                                            {formData.expenseItems.length > 1 && (
-                                                <button className="remove-item-btn" onClick={() => removeItem(idx)} style={{ position: 'absolute', top: '10px', right: '10px', color: '#dc3545', border: 'none', background: 'none', cursor: 'pointer' }}>
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            )}
-                                            <h5 className="mb-3">Item #{idx + 1}</h5>
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label>Expense Category *</label>
-                                                    <select name="category" value={item.category} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_category`] ? 'error' : ''}>
-                                                        <option value="">Select Category</option>
-                                                        <option value="EVENT_DECORATION">Decoration</option>
-                                                        <option value="REFRESHMENTS">Catering</option>
-                                                        <option value="PRINTING">Printing</option>
-                                                        <option value="EQUIPMENT">Equipment</option>
-                                                        <option value="MISCELLANEOUS">Miscellaneous</option>
-                                                        {categories.length > 0 && <option disabled>──────────</option>}
-                                                        {categories.map(c => (
-                                                            <option key={c._id} value={c.name}>{c.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <div className="form-group">
-                                                    <label>Vendor Name *</label>
-                                                    <input type="text" name="vendorName" value={item.vendorName} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_vendor`] ? 'error' : ''} />
-                                                </div>
+                                        {['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
+                                            <div className="form-group mb-4">
+                                                <label>Department *</label>
+                                                <select
+                                                    name="departmentId"
+                                                    value={formData.departmentId}
+                                                    onChange={handleEventChange}
+                                                    className={errors.departmentId ? 'error' : ''}
+                                                >
+                                                    <option value="">Select Department</option>
+                                                    {departments.map(dept => (
+                                                        <option key={dept._id} value={dept._id}>{dept.name}</option>
+                                                    ))}
+                                                </select>
+                                                {errors.departmentId && <span className="form-error">{errors.departmentId}</span>}
                                             </div>
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label>Amount (₹) *</label>
-                                                    <input type="number" name="amount" value={item.amount} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_amount`] ? 'error' : ''} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label>Bill Number *</label>
-                                                    <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
-                                                </div>
-                                            </div>
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label>Bill Date *</label>
-                                                    <input type="date" name="billDate" value={item.billDate} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_date`] ? 'error' : ''} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label>Description</label>
-                                                    <input type="text" name="description" value={item.description} onChange={(e) => handleItemChange(idx, e)} placeholder="What was this for?" />
-                                                </div>
+                                        )}
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label>Event Name *</label>
+                                                <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} placeholder="e.g. Annual Tech Symposium" className={errors.eventName ? 'error' : ''} />
+                                                {errors.eventName && <span className="form-error">{errors.eventName}</span>}
                                             </div>
                                             <div className="form-group">
-                                                <label>Attach Bills</label>
-                                                <input type="file" multiple onChange={(e) => handleFileChange(idx, e)} accept="image/*,.pdf" />
-                                                <div className="mt-2" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                    {item.attachments.map((file, fIdx) => (
-                                                        <span key={fIdx} style={{ background: '#eee', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            {file.name} <X size={12} onClick={() => removeItemFile(idx, fIdx)} style={{ cursor: 'pointer' }} />
-                                                        </span>
+                                                <label>Event Category *</label>
+                                                <select name="eventType" value={formData.eventType} onChange={handleEventChange} className={errors.eventType ? 'error' : ''}>
+                                                    <option value="">Select Category</option>
+                                                    {categories.map(c => (
+                                                        <option key={c._id} value={c.name}>{c.name}</option>
                                                     ))}
-                                                </div>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                                {errors.eventType && <span className="form-error">{errors.eventType}</span>}
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-
-                                <div className="form-summary mt-4" style={{ borderTop: '2px solid #eee', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div className="total-preview">
-                                        <strong>Total Event Budget: </strong>
-                                        <span className={`text-xl font-bold ${calculateTotal() > remainingBudget ? 'text-danger' : 'text-primary'}`}>
-                                            {formatCurrency(calculateTotal())}
-                                        </span>
-                                    </div>
-                                    <div className="form-actions">
-                                        <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Back</button>
-                                        <button className="btn btn-primary" onClick={nextStep}>Preview & Submit <ChevronRight size={16} /></button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 3 && (
-                            <div className="form-step">
-                                <h3>Summary Review</h3>
-                                <div className="summary-card" style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '10px', marginTop: '1rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div><strong>Event:</strong> {formData.eventName}</div>
-                                        <div><strong>Type:</strong> {formData.eventType}</div>
-                                        <div><strong>Date:</strong> {formData.eventDate}</div>
-                                        <div><strong>Budget Head:</strong> {budgetHeads.find(h => h._id === formData.budgetHeadId)?.name}</div>
-                                    </div>
-                                    <hr className="my-3" />
-                                    <div><strong>Expense Items:</strong> {formData.expenseItems.length} items</div>
-                                    <div className="mt-3">
-                                        {formData.expenseItems.map((item, idx) => (
-                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px dashed #eee', pb: '4px' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <span style={{ fontWeight: 'bold' }}>{item.vendorName}</span>
-                                                    <span style={{ fontSize: '0.75rem', color: '#666' }}>{item.category} | {item.billNumber} | {item.billDate}</span>
-                                                </div>
-                                                <span style={{ fontWeight: 'bold' }}>{formatCurrency(item.amount)}</span>
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label>Event Date *</label>
+                                                <input type="date" name="eventDate" value={formData.eventDate} onChange={handleEventChange} className={errors.eventDate ? 'error' : ''} />
+                                                {errors.eventDate && <span className="form-error">{errors.eventDate}</span>}
                                             </div>
-                                        ))}
+                                            <div className="form-group">
+                                                <label>Budget Head *</label>
+                                                <select name="budgetHeadId" value={formData.budgetHeadId} onChange={handleEventChange} className={errors.budgetHeadId ? 'error' : ''}>
+                                                    <option value="">Select Budget Head</option>
+                                                    {budgetHeads.length === 0 && <option disabled>No budget heads available</option>}
+                                                    {budgetHeads.map(head => (
+                                                        <option key={head._id} value={head._id}>
+                                                            {head.name} ({head.category})
+                                                        </option>
+                                                    ))}
+                                                </select>{errors.budgetHeadId && <span className="form-error">{errors.budgetHeadId}</span>}
+                                                {formData.budgetHeadId && (
+                                                    <span className={`form-help ${remainingBudget === 0 ? 'text-danger' : 'text-success'}`} style={{ fontWeight: remainingBudget === 0 ? 'bold' : 'normal' }}>
+                                                        {remainingBudget === 0
+                                                            ? `No allocation found for this head in ${getCurrentFinancialYear()}`
+                                                            : `Available Balance: ${formatCurrency(remainingBudget)}`}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>General Description</label>
+                                            <textarea name="description" value={formData.description} onChange={handleEventChange} rows="3" placeholder="Brief about the event..."></textarea>
+                                        </div>
+                                        <div className="form-actions" style={{ justifyContent: 'flex-end' }}>
+                                            <button type="button" className="btn btn-primary" onClick={nextStep}>
+                                                Next: Add Items <ChevronRight size={16} />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <hr className="my-3" />
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span className="text-lg font-bold">Total Request:</span>
-                                        <span className="text-xl font-bold text-primary">{formatCurrency(calculateTotal())}</span>
+                                )}
+
+                                {step === 2 && (
+                                    <div className="form-step">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                            <h3>Expense Items</h3>
+                                            <button type="button" className="btn btn-outline btn-sm" onClick={addItem}><Plus size={16} /> Add Item</button>
+                                        </div>
+
+                                        {errors.budget && <div className="alert alert-danger mb-3">{errors.budget}</div>}
+
+                                        <div className="items-scroll-area" style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '1rem' }}>
+                                            {(!formData.expenseItems || formData.expenseItems.length === 0) && (
+                                                <div className="text-center py-5 text-muted">
+                                                    No items added yet. Click "Add Item" to start.
+                                                </div>
+                                            )}
+                                            {formData.expenseItems && formData.expenseItems.map((item, idx) => (
+                                                <div key={idx} className="expense-item-card mb-4" style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px', background: '#fdfdfd', position: 'relative' }}>
+                                                    {formData.expenseItems.length > 1 && (
+                                                        <button type="button" className="remove-item-btn" onClick={() => removeItem(idx)} style={{ position: 'absolute', top: '10px', right: '10px', color: '#dc3545', border: 'none', background: 'none', cursor: 'pointer' }}>
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    )}
+                                                    <h5 className="mb-3">Item #{idx + 1}</h5>
+                                                    <div className="form-row">
+                                                        <div className="form-group">
+                                                            <label>Expense Category *</label>
+                                                            <select name="category" value={item.category} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_category`] ? 'error' : ''}>
+                                                                <option value="">Select Category</option>
+                                                                <option value="EVENT_DECORATION">Decoration</option>
+                                                                <option value="REFRESHMENTS">Catering</option>
+                                                                <option value="PRINTING">Printing</option>
+                                                                <option value="EQUIPMENT">Equipment</option>
+                                                                <option value="MISCELLANEOUS">Miscellaneous</option>
+                                                                {categories.length > 0 && <option disabled>──────────</option>}
+                                                                {categories.map(c => (
+                                                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Vendor Name *</label>
+                                                            <input type="text" name="vendorName" value={item.vendorName} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_vendor`] ? 'error' : ''} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-row">
+                                                        <div className="form-group">
+                                                            <label>Amount (₹) *</label>
+                                                            <input type="number" name="amount" value={item.amount} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_amount`] ? 'error' : ''} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Bill Number *</label>
+                                                            <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-row">
+                                                        <div className="form-group">
+                                                            <label>Bill Date *</label>
+                                                            <input type="date" name="billDate" value={item.billDate} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_date`] ? 'error' : ''} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Description</label>
+                                                            <input type="text" name="description" value={item.description} onChange={(e) => handleItemChange(idx, e)} placeholder="What was this for?" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Attach Bills</label>
+                                                        <input type="file" multiple onChange={(e) => handleFileChange(idx, e)} accept="image/*,.pdf" />
+                                                        <p className="form-help mt-1" style={{ fontSize: '0.75rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <AlertCircle size={12} /> Supporting documents must be clear and legible. PDF or Images only.
+                                                        </p>
+                                                        <div className="mt-2" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                            {item.attachments.map((file, fIdx) => (
+                                                                <span key={fIdx} style={{ background: '#eee', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                    {file.name} <X size={12} onClick={() => removeItemFile(idx, fIdx)} style={{ cursor: 'pointer' }} />
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="form-summary mt-4" style={{ borderTop: '2px solid #eee', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div className="total-preview">
+                                                <strong>Total Event Budget: </strong>
+                                                <span className={`text-xl font-bold ${calculateTotal() > remainingBudget ? 'text-danger' : 'text-primary'}`}>
+                                                    {formatCurrency(calculateTotal())}
+                                                </span>
+                                            </div>
+                                            <div className="form-actions">
+                                                <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Back</button>
+                                                <button className="btn btn-primary" onClick={nextStep}>Preview & Submit <ChevronRight size={16} /></button>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
-                                <div className="alert alert-info mt-4" style={{ fontSize: '0.85rem' }}>
-                                    <AlertCircle size={16} /> Budget will be deducted **only after Office Sanction**. This request will now move to HOD for verification.
-                                </div>
+                                {step === 3 && (
+                                    <div className="form-step">
+                                        <h3>Summary Review</h3>
+                                        <div className="summary-card" style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '10px', marginTop: '1rem' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                <div><strong>Event:</strong> {formData.eventName}</div>
+                                                <div><strong>Category:</strong> {formData.eventType}</div>
+                                                <div><strong>Date:</strong> {formData.eventDate}</div>
+                                                <div><strong>Budget Head:</strong> {budgetHeads.find(h => h._id === formData.budgetHeadId)?.name}</div>
+                                            </div>
+                                            <hr className="my-3" />
+                                            <div><strong>Expense Items:</strong> {formData.expenseItems.length} items</div>
+                                            <div className="mt-3">
+                                                {formData.expenseItems.map((item, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px dashed #eee', pb: '4px' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            <span style={{ fontWeight: 'bold' }}>{item.vendorName}</span>
+                                                            <span style={{ fontSize: '0.75rem', color: '#666' }}>{item.category} | {item.billNumber} | {item.billDate}</span>
+                                                        </div>
+                                                        <span style={{ fontWeight: 'bold' }}>{formatCurrency(item.amount)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <hr className="my-3" />
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span className="text-lg font-bold">Total Request:</span>
+                                                <span className="text-xl font-bold text-primary">{formatCurrency(calculateTotal())}</span>
+                                            </div>
+                                        </div>
 
-                                <div className="form-actions mt-4" style={{ justifyContent: 'space-between' }}>
-                                    <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Edit Details</button>
-                                    <button className="btn btn-primary" onClick={handleSubmit} disabled={isSubmitting}>
-                                        {isSubmitting ? 'Submitting...' : 'Confirm & Submit Event'} <Send size={16} className="ml-2" />
-                                    </button>
-                                </div>
-                            </div>
+                                        <div className="alert alert-info mt-4" style={{ fontSize: '0.85rem' }}>
+                                            <AlertCircle size={16} /> Budget will be deducted **only after Office Sanction**. This request will now move to HOD for verification.
+                                        </div>
+
+                                        <div className="form-actions mt-4" style={{ justifyContent: 'space-between' }}>
+                                            <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Edit Details</button>
+                                            <button className="btn btn-primary" onClick={handleSubmit} disabled={isSubmitting}>
+                                                {isSubmitting ? 'Submitting...' : 'Confirm & Submit Event'} <Send size={16} className="ml-2" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
 
                 <div className="ai-planner-column">
                     <div className="ai-planner-sticky">
-                        <div className="ai-label">
-                            <Sparkles size={16} />
-                            <span>AI Assistant</span>
-                        </div>
                         <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
                     </div>
                 </div>
@@ -1032,11 +1143,13 @@ export const ResubmitExpenditure = () => {
                                 <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} className={errors.eventName ? 'error' : ''} />
                             </div>
                             <div className="form-group">
-                                <label>Event Type *</label>
-                                <select name="eventType" value={formData.eventType} onChange={handleEventChange}>
-                                    <option value="Seminar">Seminar</option>
-                                    <option value="Workshop">Workshop</option>
-                                    <option value="Association">Association</option>
+                                <label>Event Category *</label>
+                                <select name="eventType" value={formData.eventType} onChange={handleEventChange} className={errors.eventType ? 'error' : ''}>
+                                    <option value="">Select Category</option>
+                                    {categories.map(c => (
+                                        <option key={c._id} value={c.name}>{c.name}</option>
+                                    ))}
+                                    <option value="Other">Other</option>
                                 </select>
                             </div>
                         </div>
@@ -1109,6 +1222,7 @@ export const ResubmitExpenditure = () => {
                         <h3>Confirm Resubmission</h3>
                         <div className="p-4 bg-light rounded mt-3">
                             <div><strong>Event:</strong> {formData.eventName}</div>
+                            <div><strong>Category:</strong> {formData.eventType}</div>
                             <div><strong>Total Amount:</strong> {formatCurrency(calculateTotal())}</div>
                         </div>
                         <div className="form-actions mt-4">

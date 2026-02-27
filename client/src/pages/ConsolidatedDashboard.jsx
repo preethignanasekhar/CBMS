@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
 import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight } from 'lucide-react';
+import PageHeader from '../components/Common/PageHeader';
 import './ConsolidatedDashboard.scss';
 
 const ConsolidatedDashboard = () => {
@@ -161,11 +162,11 @@ const ConsolidatedDashboard = () => {
   }
 
   return (
-    <div className="consolidated-dashboard-container">
-      <div className="dashboard-header">
-        <h1>Consolidated Budget Dashboard</h1>
-        <p>Complete overview of budget allocations and expenditures across all departments</p>
-      </div>
+    <div className="page-container consolidated-dashboard-container">
+      <PageHeader 
+        title="Consolidated Budget Dashboard" 
+        subtitle="Complete overview of budget allocations and expenditures across all departments"
+      />
 
       {error && (
         <div className="error-message">

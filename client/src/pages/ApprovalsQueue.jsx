@@ -4,6 +4,7 @@ import { expenditureAPI, budgetProposalAPI, aiAPI, allocationAPI } from '../serv
 import Tooltip from '../components/Tooltip/Tooltip';
 import { Check, X, Search, FileText, DollarSign, ClipboardList, Sparkles, ArrowUpDown, Filter } from 'lucide-react';
 import Button from '../components/Common/Button';
+import PageHeader from '../components/Common/PageHeader';
 import StatusBadge from '../components/Common/StatusBadge';
 import './ApprovalsQueue.scss';
 
@@ -127,28 +128,25 @@ const ApprovalsQueue = () => {
 
   return (
     <div className="page-container approvals-queue-container">
-      <div className="approvals-header mb-5">
-        <div className="header-left">
-          <h1 className="page-title">Approvals Queue</h1>
-          <p className="page-subtitle">Verify and approve departmental budget requests</p>
+      <PageHeader 
+        title="Approvals Queue" 
+        subtitle="Verify and approve departmental budget requests"
+      >
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" className="pending-indicator">
+            <ClipboardList size={16} />{' '}
+            {
+              approvalItems.filter((i) => {
+                if (user?.role === 'hod') return i.status === 'pending' || i.status === 'submitted';
+                if (['principal', 'vice_principal'].includes(user?.role)) return i.status === 'verified' || i.status === 'verified_by_hod';
+                if (user?.role === 'office') return i.status === 'verified_by_principal' || i.status === 'approved';
+                return false;
+              }).length
+            }{' '}
+            Pending
+          </Button>
         </div>
-        <div className="header-right">
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" className="pending-indicator">
-              <ClipboardList size={16} />{' '}
-              {
-                approvalItems.filter((i) => {
-                  if (user?.role === 'hod') return i.status === 'pending' || i.status === 'submitted';
-                  if (['principal', 'vice_principal'].includes(user?.role)) return i.status === 'verified' || i.status === 'verified_by_hod';
-                  if (user?.role === 'office') return i.status === 'verified_by_principal' || i.status === 'approved';
-                  return false;
-                }).length
-              }{' '}
-              Pending
-            </Button>
-          </div>
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="filters-section mb-4">
         <div className="search-box">

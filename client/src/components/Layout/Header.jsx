@@ -49,13 +49,8 @@ const Header = ({ onMenuClick }) => {
             </button>
           </Tooltip>
 
-          <div className="header-search">
-            <Search size={18} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="search-input"
-            />
+          <div className="header-title">
+            CBMS
           </div>
         </div>
 

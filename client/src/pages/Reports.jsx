@@ -127,17 +127,42 @@ const Reports = () => {
     let fileName = `${reportType}-report.xlsx`;
 
     if (reportType === 'expenditures') {
-      exportData = data.expenditures.map(exp => ({
-        'Bill Number': exp.billNumber,
-        'Bill Date': formatDate(exp.billDate),
-        'Amount': exp.billAmount,
-        'Party Name': exp.partyName,
-        'Department': exp.department.name,
-        'Budget Head': exp.budgetHead.name,
-        'Status': exp.status,
-        'Details': exp.expenseDetails,
-        'Attachments': exp.attachments ? exp.attachments.map(a => a.url).join(', ') : 'None'
-      }));
+      data.expenditures.forEach(exp => {
+        if (exp.expenseItems && exp.expenseItems.length > 0) {
+          exp.expenseItems.forEach(item => {
+            exportData.push({
+              'Event Name': exp.eventName,
+              'Event Type': exp.eventType,
+              'Event Date': formatDate(exp.eventDate),
+              'Bill Number': item.billNumber,
+              'Bill Date': formatDate(item.billDate),
+              'Amount': item.amount,
+              'Vendor': item.vendorName,
+              'Department': exp.department?.name || 'N/A',
+              'Budget Head': exp.budgetHead?.name || 'N/A',
+              'Status': exp.status,
+              'Financial Year': exp.financialYear,
+              'Submitted By': exp.submittedBy?.name || 'N/A'
+            });
+          });
+        } else {
+          // Fallback for requests without bill items (or if backend sent legacy format)
+          exportData.push({
+            'Event Name': exp.eventName,
+            'Event Type': exp.eventType,
+            'Event Date': formatDate(exp.eventDate),
+            'Bill Number': exp.billNumber || 'N/A',
+            'Bill Date': exp.billDate ? formatDate(exp.billDate) : 'N/A',
+            'Amount': exp.billAmount || exp.totalAmount || 0,
+            'Vendor': exp.partyName || 'N/A',
+            'Department': exp.department?.name || 'N/A',
+            'Budget Head': exp.budgetHead?.name || 'N/A',
+            'Status': exp.status,
+            'Financial Year': exp.financialYear,
+            'Submitted By': exp.submittedBy?.name || 'N/A'
+          });
+        }
+      });
     } else if (reportType === 'allocations') {
       exportData = data.allocations.map(alloc => ({
         'Financial Year': alloc.financialYear,
@@ -170,16 +195,23 @@ const Reports = () => {
     let rows = [];
 
     if (reportType === 'expenditures') {
-      columns = ['Bill #', 'Date', 'Amount', 'Party', 'Dept', 'Status', 'Attachments'];
-      rows = data.expenditures.map(exp => [
-        exp.billNumber,
-        formatDate(exp.billDate),
-        formatCurrency(exp.billAmount),
-        exp.partyName,
-        exp.department.name,
-        exp.status,
-        exp.attachments ? `${exp.attachments.length} files` : '0 files'
-      ]);
+      columns = ['Event', 'Event Date', 'Bill #', 'Amount', 'Dept', 'Status'];
+      data.expenditures.forEach(exp => {
+        const items = exp.expenseItems && exp.expenseItems.length > 0
+          ? exp.expenseItems
+          : [{ billNumber: exp.billNumber || 'N/A', amount: exp.billAmount || exp.totalAmount || 0 }];
+
+        items.forEach(item => {
+          rows.push([
+            exp.eventName,
+            formatDate(exp.eventDate),
+            item.billNumber,
+            formatCurrency(item.amount),
+            exp.department?.name || 'N/A',
+            exp.status
+          ]);
+        });
+      });
     } else if (reportType === 'allocations') {
       columns = ['FY', 'Dept', 'Budget Head', 'Allocated', 'Spent', 'Remaining'];
       rows = data.allocations.map(alloc => [
@@ -212,6 +244,7 @@ const Reports = () => {
   };
 
   const formatDate = (date) => {
+    if (!date) return 'N/A';
     return new Date(date).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -260,37 +293,33 @@ const Reports = () => {
             <table>
               <thead>
                 <tr>
+                  <th>Event</th>
+                  <th>Event Date</th>
                   <th>Bill #</th>
-                  <th>Date</th>
+                  <th>Bill Date</th>
                   <th>Department</th>
-                  <th>Total Amount</th>
+                  <th>Amount</th>
                   <th>Status</th>
-                  <th>Details</th>
-                  <th>Attachments</th>
                 </tr>
               </thead>
               <tbody>
-                {reportData.expenditures.map((exp, index) => (
-                  <tr key={index}>
-                    <td data-label="Bill #">{exp.billNumber}</td>
-                    <td data-label="Date">{formatDate(exp.billDate)}</td>
-                    <td data-label="Department">{exp.department.name}</td>
-                    <td data-label="Total Amount">{formatCurrency(exp.billAmount)}</td>
-                    <td class={`status ${exp.status}`} data-label="Status">{exp.status}</td>
-                    <td data-label="Details">{exp.expenseDetails}</td>
-                    <td data-label="Attachments">
-                      {exp.attachments && exp.attachments.length > 0 ? (
-                        <div className="attachments-list">
-                          {exp.attachments.map((file, i) => (
-                            <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="attachment-link">
-                              <i className="fas fa-paperclip"></i> {i + 1}
-                            </a>
-                          ))}
-                        </div>
-                      ) : '-'}
-                    </td>
-                  </tr>
-                ))}
+                {reportData.expenditures.flatMap((exp, expIdx) => {
+                  const items = exp.expenseItems && exp.expenseItems.length > 0
+                    ? exp.expenseItems
+                    : [{ billNumber: exp.billNumber || 'N/A', billDate: exp.billDate, amount: exp.billAmount || exp.totalAmount, vendorName: exp.partyName || 'N/A' }];
+
+                  return items.map((item, itemIdx) => (
+                    <tr key={`${expIdx}-${itemIdx}`}>
+                      <td data-label="Event">{exp.eventName}</td>
+                      <td data-label="Event Date">{formatDate(exp.eventDate)}</td>
+                      <td data-label="Bill #">{item.billNumber}</td>
+                      <td data-label="Bill Date">{item.billDate ? formatDate(item.billDate) : 'N/A'}</td>
+                      <td data-label="Department">{exp.department.name}</td>
+                      <td data-label="Amount">{formatCurrency(item.amount)}</td>
+                      <td className={`status ${exp.status}`} data-label="Status">{exp.status}</td>
+                    </tr>
+                  ));
+                })}
               </tbody>
             </table>
           </div>
@@ -426,12 +455,12 @@ const Reports = () => {
               <span className="value">{data.utilizationPercentage ? data.utilizationPercentage.toFixed(2) : 0}%</span>
             </div>
             <div className="summary-item">
-                <span className="label">Pending Bills:</span>
-                <span className="value pending">{formatCurrency(data.totalPending)}</span>
+              <span className="label">Pending Bills:</span>
+              <span className="value pending">{formatCurrency(data.totalPending)}</span>
             </div>
-             <div className="summary-item">
-                <span className="label">Approved Bills:</span>
-                <span className="value approved">{formatCurrency(data.totalApproved)}</span>
+            <div className="summary-item">
+              <span className="label">Approved Bills:</span>
+              <span className="value approved">{formatCurrency(data.totalApproved)}</span>
             </div>
           </div>
         </div>
@@ -440,7 +469,7 @@ const Reports = () => {
           <div className="report-comparison">
             <h3>Year-over-Year Comparison ({data.yearComparison.previousYear} vs {data.yearComparison.currentYear})</h3>
             <div className="comparison-grid">
-               <div className="comparison-item">
+              <div className="comparison-item">
                 <span className="label">Allocated Change</span>
                 <span className={`value ${data.yearComparison.summary.changes.allocatedChange >= 0 ? 'positive' : 'negative'}`}>
                   {data.yearComparison.summary.changes.allocatedChange.toFixed(2)}%
