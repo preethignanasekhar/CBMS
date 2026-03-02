@@ -173,7 +173,7 @@ const History = () => {
                                             <td><StatusBadge status={proposal?.status} /></td>
                                             <td>
                                                 <div className="status-trail">
-                                                    <span className={`step ${['submitted', 'verified_by_hod', 'verified_by_principal', 'approved', 'allocated'].includes(proposal?.status) ? 'done' : ''}`} title="Submitted by Department">
+                                                    <span className={`step ${['submitted', 'verified_by_hod', 'verified_by_principal', 'approved', 'allocated', 'revised', 'rejected', 'verified'].includes(proposal?.status) ? 'done' : ''}`} title="Submitted by Department">
                                                         S
                                                         <span className="tooltip">Submitted by Department</span>
                                                     </span>

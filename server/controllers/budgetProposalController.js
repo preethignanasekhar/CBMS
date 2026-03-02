@@ -19,7 +19,11 @@ const getBudgetProposals = async (req, res) => {
 
     // Status filtering
     if (status && status !== 'all') {
-      query.status = status;
+      if (status.includes(',')) {
+        query.status = { $in: status.split(',') };
+      } else {
+        query.status = status;
+      }
     }
 
     // Role-based visibility and default filtering if status not provided
@@ -166,6 +170,7 @@ const createBudgetProposal = async (req, res) => {
       });
     }
 
+    const status = req.body.status || 'draft';
     const proposal = await BudgetProposal.create({
       financialYear,
       department: req.user.department,
@@ -173,7 +178,8 @@ const createBudgetProposal = async (req, res) => {
       notes,
       submittedBy: req.user._id,
       lastModifiedBy: req.user._id,
-      status: 'draft'
+      status: status,
+      ...(status === 'submitted' ? { submittedDate: new Date() } : {})
     });
 
     await recordAuditLog({
@@ -181,7 +187,7 @@ const createBudgetProposal = async (req, res) => {
       req,
       targetEntity: 'BudgetProposal',
       targetId: proposal._id,
-      details: { financialYear }
+      details: { financialYear, status }
     });
 
     res.status(201).json({
@@ -202,7 +208,7 @@ const createBudgetProposal = async (req, res) => {
 // @access  Private (HOD/Staff)
 const updateBudgetProposal = async (req, res) => {
   try {
-    const { proposalItems, notes } = req.body;
+    const { proposalItems, notes, status } = req.body;
 
     let proposal = await BudgetProposal.findById(req.params.id);
     if (!proposal) {
@@ -225,8 +231,14 @@ const updateBudgetProposal = async (req, res) => {
       proposal.status = 'revised';
     }
 
+    // Allow updating status to 'submitted' directly from form
+    if (status === 'submitted' && ['draft', 'revised'].includes(proposal.status)) {
+      proposal.status = 'submitted';
+      proposal.submittedDate = new Date();
+    }
+
     proposal.proposalItems = proposalItems || proposal.proposalItems;
-    proposal.notes = notes || proposal.notes;
+    proposal.notes = notes !== undefined ? notes : proposal.notes;
     proposal.lastModifiedBy = req.user._id;
 
     await proposal.save();
@@ -563,10 +575,10 @@ const verifyBudgetProposal = async (req, res) => {
         });
       }
 
-      if (proposal.status !== 'submitted') {
+      if (proposal.status !== 'submitted' && proposal.status !== 'revised') {
         return res.status(400).json({
           success: false,
-          message: 'HOD can only verify submitted proposals'
+          message: 'HOD can only verify submitted or revised proposals'
         });
       }
       nextStatus = 'verified_by_hod';

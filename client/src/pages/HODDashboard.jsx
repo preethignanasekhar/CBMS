@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import { expenditureAPI, budgetProposalAPI, allocationAPI, reportAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +13,7 @@ import './HODDashboard.scss';
 
 const HODDashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [expenditures, setExpenditures] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -278,7 +280,7 @@ const HODDashboard = () => {
 
       // Map dashboard filter to proposal status
       if (statusFilter === 'pending') {
-        params.status = 'submitted';
+        params.status = 'submitted,revised';
       } else if (statusFilter === 'verified') {
         // HOD verified means it's with Principal or Office now or simply verified by HOD
         params.status = 'verified_by_hod';
@@ -631,6 +633,28 @@ const HODDashboard = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="quick-management mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="card-standard">
+          <h3>Reports & Analytics</h3>
+          <p className="text-sm text-gray-500 mb-4">Generate comprehensive reports for budget allocations and expenditures.</p>
+          <div className="flex gap-2">
+            <button onClick={() => navigate('/reports')} className="btn btn-secondary flex items-center gap-2">
+              <FileText size={18} /> View Reports
+            </button>
+          </div>
+        </div>
+
+        <div className="card-standard">
+          <h3>Year-over-Year Comparison</h3>
+          <p className="text-sm text-gray-500 mb-4">Compare budget allocations and spending between financial years.</p>
+          <div className="flex gap-2">
+            <button onClick={() => navigate('/year-comparison')} className="btn btn-secondary flex items-center gap-2">
+              <CreditCard size={18} /> View Comparison
+            </button>
+          </div>
         </div>
       </div>
 

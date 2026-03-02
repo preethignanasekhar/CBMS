@@ -40,7 +40,7 @@ const ApprovalsQueue = () => {
           filters.status = 'all';
           propParams.status = 'all';
         } else if (user.role === 'hod') {
-          propParams.status = 'submitted';
+          propParams.status = 'submitted,revised';
         }
       } else {
         propParams.status = getPropStatus();
@@ -128,25 +128,10 @@ const ApprovalsQueue = () => {
 
   return (
     <div className="page-container approvals-queue-container">
-      <PageHeader 
-        title="Approvals Queue" 
+      <PageHeader
+        title="Approvals Queue"
         subtitle="Verify and approve departmental budget requests"
-      >
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" className="pending-indicator">
-            <ClipboardList size={16} />{' '}
-            {
-              approvalItems.filter((i) => {
-                if (user?.role === 'hod') return i.status === 'pending' || i.status === 'submitted';
-                if (['principal', 'vice_principal'].includes(user?.role)) return i.status === 'verified' || i.status === 'verified_by_hod';
-                if (user?.role === 'office') return i.status === 'verified_by_principal' || i.status === 'approved';
-                return false;
-              }).length
-            }{' '}
-            Pending
-          </Button>
-        </div>
-      </PageHeader>
+      />
 
       <div className="filters-section mb-4">
         <div className="search-box">
@@ -238,7 +223,7 @@ const ApprovalsQueue = () => {
                           user?.role === 'hod' && (
                             <>
                               {((item.itemType === 'expenditure' && item.status === 'pending') ||
-                                (item.itemType === 'proposal' && item.status === 'submitted')) && (
+                                (item.itemType === 'proposal' && (item.status === 'submitted' || item.status === 'revised'))) && (
                                   <>
                                     <Tooltip text="Verify & Send Forward" position="top">
                                       <button className="btn-icon approve" onClick={() => handleAction(item, 'verify')}>

@@ -1938,12 +1938,7 @@ export const BudgetProposals = () => {
                         icon={<DollarSign size={24} />}
                         color="var(--primary)"
                     />
-                    <StatCard
-                        title="Submitted"
-                        value={stats.submittedProposals}
-                        icon={<Clock size={24} />}
-                        color="var(--info)"
-                    />
+
                     <StatCard
                         title="Approved"
                         value={stats.approvedProposals}
@@ -2065,16 +2060,18 @@ export const BudgetProposals = () => {
                                                             <Pencil size={16} />
                                                         </Link>
                                                     </Tooltip>
-                                                    <Tooltip text="Submit for Approval" position="top">
-                                                        <button
-                                                            onClick={() => handleSubmitProposal(proposal._id)}
-                                                            className="btn btn-sm btn-success"
-                                                            style={{ color: 'white' }}
-                                                        >
-                                                            <Send size={16} />
-                                                        </button>
-                                                    </Tooltip>
                                                 </>
+                                            )}
+                                            {(proposal.status === 'draft' || proposal.status === 'revised') && (
+                                                <Tooltip text="Submit for Approval" position="top">
+                                                    <button
+                                                        onClick={() => handleSubmitProposal(proposal._id)}
+                                                        className="btn btn-sm btn-success"
+                                                        style={{ color: 'white' }}
+                                                    >
+                                                        <Send size={16} />
+                                                    </button>
+                                                </Tooltip>
                                             )}
                                             {proposal.status === 'rejected' && (
                                                 <Tooltip text="Resubmit (Copy to Draft)" position="top">

@@ -22,6 +22,7 @@
   "type": "commonjs",
   "dependencies": {
     "@sendgrid/mail": "^8.1.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "clamscan": "^2.4.0",
     "cookie-signature": "^1.2.2",
