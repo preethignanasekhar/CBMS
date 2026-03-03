@@ -88,8 +88,7 @@ const expenditureSchema = new mongoose.Schema({
   },
   eventType: {
     type: String,
-    required: [true, 'Event type is required'],
-    enum: ['Seminar', 'Workshop', 'Association', 'Research', 'Other']
+    required: [true, 'Event type is required']
   },
   eventDate: {
     type: Date,

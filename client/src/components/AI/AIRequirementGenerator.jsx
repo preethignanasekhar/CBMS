@@ -1,22 +1,125 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, CheckCircle, AlertCircle, Plus, Info, ChevronRight, Wand2, Loader2, Send, User, Bot, RefreshCw } from 'lucide-react';
+import { Sparkles, CheckCircle, ChevronRight, Send, User, Bot, RefreshCw, IndianRupee, Clock, Flag, Calendar, Plus } from 'lucide-react';
 import axios from 'axios';
 import './AIRequirementGenerator.scss';
 
+const QUESTION_NODES = {
+    eventName: {
+        text: "Hello! What event are you planning today?",
+        process: (v) => v,
+        next: () => 'eventType'
+    },
+    eventType: {
+        text: "Is this a Workshop, Seminar, Cultural event, or something else?",
+        process: (v) => v,
+        next: () => 'days'
+    },
+    days: {
+        text: "How many days will the event last? (e.g., 1, 2)",
+        process: (v) => { const num = parseInt(v.replace(/[^0-9]/g, ''), 10); return isNaN(num) ? 1 : num; },
+        next: () => 'participants'
+    },
+    participants: {
+        text: "How many participants are expected?",
+        process: (v) => { const num = parseInt(v.replace(/[^0-9]/g, ''), 10); return isNaN(num) ? 50 : num; },
+        next: () => 'isInternal'
+    },
+    isInternal: {
+        text: "Is this an internal event or are external participants joining? (Type 'Internal' or 'External')",
+        process: (v) => !v.toLowerCase().includes('external'),
+        next: () => 'venue'
+    },
+    venue: {
+        text: "Where will the event be conducted? (e.g., Lab, Seminar Hall)",
+        process: (v) => v.toLowerCase().includes('lab') ? 'lab' : 'seminar',
+        next: () => 'laptopType'
+    },
+    laptopType: {
+        text: "Will participants use College 'Systems' (Lab) or 'Personal Laptops'?",
+        process: (v) => v.toLowerCase().includes('system') || v.toLowerCase().includes('college') ? 'system' : 'laptop',
+        next: () => 'softwareRequired'
+    },
+    softwareRequired: {
+        text: "Does this require any specific software installation? (Type 'Yes' or 'No/None')",
+        process: (v) => v.toLowerCase().includes('yes'),
+        next: (v) => v ? 'softwareType' : 'resourcePerson'
+    },
+    softwareType: {
+        text: "Is the software Free or Paid?",
+        process: (v) => v.toLowerCase().includes('paid') ? 'paid' : 'free',
+        next: (v) => v === 'paid' ? 'softwareCost' : 'resourcePerson'
+    },
+    softwareCost: {
+        text: "Please enter the estimated software license cost:",
+        process: (v) => parseInt(v.replace(/[^0-9]/g, ''), 10) || 5000,
+        next: () => 'resourcePerson'
+    },
+    resourcePerson: {
+        text: "Will there be a Resource Person or Chief Guest? (Type 'Yes' or 'No')",
+        process: (v) => v.toLowerCase().includes('yes'),
+        next: (v) => v ? 'resourcePersonType' : 'participantFood'
+    },
+    resourcePersonType: {
+        text: "Is the Resource Person Internal or External?",
+        process: (v) => v.toLowerCase().includes('external') ? 'external' : 'internal',
+        next: () => 'honorarium'
+    },
+    honorarium: {
+        text: "What is the estimated Honorarium/Payment amount for the guest?",
+        process: (v) => parseInt(v.replace(/[^0-9]/g, ''), 10) || 0,
+        next: (v, data) => data.resourcePersonType === 'external' ? 'guestAccommodation' : 'participantFood'
+    },
+    guestAccommodation: {
+        text: "Does the external guest need accommodation? (Type 'Yes' or 'No')",
+        process: (v) => v.toLowerCase().includes('yes'),
+        next: () => 'guestTravel'
+    },
+    guestTravel: {
+        text: "Do they require a travel expense allowance? (Type 'Yes' or 'No')",
+        process: (v) => v.toLowerCase().includes('yes'),
+        next: (v) => v ? 'travelExpense' : 'participantFood'
+    },
+    travelExpense: {
+        text: "What is the estimated travel expense?",
+        process: (v) => parseInt(v.replace(/[^0-9]/g, ''), 10) || 0,
+        next: () => 'participantFood'
+    },
+    participantFood: {
+        text: "What food arrangements are needed for the participants? (You can select multiple)",
+        type: 'checkboxes',
+        options: [
+            { id: 'breakfast', label: 'Breakfast', price: 100 },
+            { id: 'lunch', label: 'Lunch', price: 200 },
+            { id: 'dinner', label: 'Dinner', price: 250 },
+            { id: 'refreshments', label: 'Refreshments (Tea/Snacks) - 2x/day', price: 100 }
+        ],
+        process: (v) => v, // we'll pass an array of selected IDs directly
+        next: () => 'certification'
+    },
+    certification: {
+        text: "Will certificates be provided to participants? (Type 'Yes' or 'No')",
+        process: (v) => v.toLowerCase().includes('yes'),
+        next: () => null // End of dynamic tree
+    }
+};
+
 const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
+    const [currentKey, setCurrentKey] = useState('eventName');
+    const [stepCount, setStepCount] = useState(0);
+    const [eventData, setEventData] = useState({
+        eventName: '', eventType: '', participants: 50, days: 1, isInternal: true,
+        venue: 'seminar', laptopType: 'laptop', softwareRequired: false, softwareType: 'free', softwareCost: 0,
+        resourcePerson: false, resourcePersonType: 'internal', honorarium: 0, guestAccommodation: false,
+        guestTravel: false, travelExpense: 0, participantFood: 'Refreshments', certification: true
+    });
     const [messages, setMessages] = useState([
-        {
-            id: '1',
-            text: "Hello! I'm your AI Planning Assistant. What event are you planning today?",
-            sender: 'ai',
-            type: 'text'
-        }
+        { id: '1', text: QUESTION_NODES['eventName'].text, sender: 'ai', type: 'text' }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState(null);
     const [selectedItems, setSelectedItems] = useState([]);
-    const [error, setError] = useState(null);
+
     const chatEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -27,30 +130,106 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
         scrollToBottom();
     }, [messages]);
 
-    const handleSendMessage = async (e) => {
+    const handleSendMessage = async (e, customValue = null) => {
         if (e) e.preventDefault();
-        if (!inputValue.trim() || loading) return;
 
-        const userMessage = inputValue;
-        setInputValue('');
+        // Use customValue if provided (like from checkbox submit), otherwise use inputValue
+        const rawMessage = customValue !== null ? customValue : inputValue;
+        if ((!rawMessage || (typeof rawMessage === 'string' && !rawMessage.trim())) && customValue === null) return;
 
-        // Add user message to chat
-        const newMessage = {
+        const userDisplayMessage = customValue !== null && Array.isArray(customValue)
+            ? (customValue.length > 0 ? customValue.join(", ") : "None")
+            : rawMessage.trim();
+
+        if (customValue === null) setInputValue('');
+
+        // Add user response to chat
+        setMessages(prev => [...prev, {
             id: Date.now().toString(),
-            text: userMessage,
+            text: userDisplayMessage,
             sender: 'user',
             type: 'text'
-        };
-        setMessages(prev => [...prev, newMessage]);
+        }]);
+
+        // Process data based on current step
+        if (!currentKey) {
+            setLoading(true);
+            setTimeout(() => {
+                setLoading(false);
+
+                // Make a mock custom item
+                const customItemName = userMessage.trim();
+                const newItem = {
+                    name: customItemName,
+                    quantity: 1,
+                    estimatedCost: 1000, // mock default cost
+                    priority: "Optional",
+                    category: "Custom Addition"
+                };
+
+                // Update analysis state with the new item so existing bubbles can pick it up
+                setAnalysis(prev => {
+                    if (!prev) return prev;
+                    const updated = { ...prev };
+                    if (updated.items) {
+                        updated.items = [...updated.items, newItem];
+                        updated.estimatedTotal += newItem.estimatedCost;
+                    }
+                    return updated;
+                });
+
+                setSelectedItems(prev => [...new Set([...prev, customItemName])]);
+
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: `I've dynamically added "${customItemName}" to your budget requirements. You can see it in the preview card above. Anything else?`,
+                    sender: 'ai',
+                    type: 'text'
+                }]);
+            }, 800);
+            return;
+        }
+
+        const currentNode = QUESTION_NODES[currentKey];
+        if (!currentNode) return;
+
+        const processedValue = currentNode.process(customValue !== null ? customValue : rawMessage);
+        const updatedData = { ...eventData, [currentKey]: processedValue };
+        setEventData(updatedData);
+
+        const nextKey = currentNode.next(processedValue, updatedData);
+
+        if (nextKey) {
+            setCurrentKey(nextKey);
+            setStepCount(prev => prev + 1);
+
+            // Add typing delay
+            setLoading(true);
+            setTimeout(() => {
+                setLoading(false);
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: QUESTION_NODES[nextKey].text,
+                    sender: 'ai',
+                    type: QUESTION_NODES[nextKey].type || 'text',
+                    options: QUESTION_NODES[nextKey].options || null,
+                    nodeKey: nextKey
+                }]);
+            }, 800);
+        } else {
+            setCurrentKey(null);
+            setStepCount(prev => prev + 1);
+            fetchAnalysis(updatedData);
+        }
+    };
+
+    const fetchAnalysis = async (dataPayload) => {
         setLoading(true);
-        setError(null);
+        setStep(questions.length); // Generating step
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('/api/ai/analyze-event', {
-                eventName: analysis?.eventName || userMessage,
-                eventDescription: userMessage
-            }, {
+            const response = await axios.post('/api/ai/analyze-event', dataPayload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -58,31 +237,38 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                 const data = response.data.data;
                 setAnalysis(data);
 
-                // Add AI Response
+                let responseText = data.nextQuestion;
+                if (!responseText) {
+                    const typeDisplay = dataPayload.eventType || 'event';
+                    const typeStr = typeDisplay.toLowerCase();
+                    const externalStr = dataPayload.isInternal ? 'internal' : 'external';
+                    responseText = `Based on your ${dataPayload.days}-day ${externalStr} ${typeStr} with ${dataPayload.participants} participants, I've generated recommended requirements. Please review and select the items you need. Would you like to modify anything?`;
+                }
+
                 setMessages(prev => [...prev, {
                     id: (Date.now() + 1).toString(),
-                    text: data.nextQuestion || "Here's what I've suggested so far:",
+                    text: responseText,
                     sender: 'ai',
-                    type: 'text',
+                    type: 'analysis',
                     data: data
                 }]);
 
-                // Update selected items with new suggestions if not already present
                 if (data.checklist) {
-                    const newItems = data.checklist.filter(item => !selectedItems.includes(item));
-                    if (newItems.length > 0) {
-                        setSelectedItems(prev => [...new Set([...prev, ...data.checklist])]);
-                    }
+                    setSelectedItems(data.checklist);
                 }
             } else {
-                setError('Failed to analyze event');
+                addAiMessage("Sorry, I encountered an error while analyzing your event.");
             }
         } catch (err) {
             console.error('Chat Error:', err);
-            setError('Error connecting to AI service');
+            addAiMessage("I'm having trouble connecting to my servers right now.");
         } finally {
             setLoading(false);
         }
+    };
+
+    const addAiMessage = (text) => {
+        setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'ai', type: 'text' }]);
     };
 
     const toggleItem = (item) => {
@@ -96,7 +282,7 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
     const handleApply = () => {
         if (onRequirementsGenerated && analysis) {
             onRequirementsGenerated({
-                eventName: analysis.eventName || analysis.analysis?.eventName,
+                eventName: eventData.eventName,
                 selectedItems,
                 budgetSuggestions: analysis.budgetSuggestions,
                 analysisDetails: analysis.analysis
@@ -105,44 +291,59 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
     };
 
     const renderMessageContent = (msg) => {
-        if (msg.sender === 'ai' && msg.id !== '1' && msg.data) {
+        if (msg.sender === 'ai' && msg.type === 'analysis' && msg.data) {
+            const { items, estimatedTotal } = msg.data;
             return (
-                <div className="ai-content-bubble">
+                <div className="ai-content-bubble advanced">
                     <p>{msg.text}</p>
 
-                    {msg.data.checklist && msg.data.checklist.length > 0 && (
-                        <div className="mini-checklist">
-                            <div className="checklist-header">
-                                <CheckCircle size={14} /> <span>Suggestions Added</span>
+                    {items && items.length > 0 && (
+                        <div className="budget-preview">
+                            <div className="budget-preview-header">
+                                <IndianRupee size={16} /> Estimated Cost Preview
                             </div>
-                            <div className="suggestion-chips">
-                                {msg.data.checklist.map((item, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`chip ${selectedItems.includes(item) ? 'active' : ''}`}
-                                        onClick={() => toggleItem(item)}
-                                    >
-                                        {item}
+                            <div className="budget-items-list">
+                                {items.map((item, idx) => (
+                                    <div key={idx} className={`budget-item-row priority-${item.priority.toLowerCase()}`} onClick={() => toggleItem(item.name)}>
+                                        <div className="item-details">
+                                            <div className="item-left">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedItems.includes(item.name)}
+                                                    readOnly
+                                                    className="checklist-cb"
+                                                />
+                                                <div>
+                                                    <span className="item-name">{item.name}</span>
+                                                    <span className="quantity-tag">Qty: {item.quantity}</span>
+                                                </div>
+                                            </div>
+                                            <div className="item-right">
+                                                <span className={`priority-badge ${item.priority.toLowerCase()}`}>{item.priority}</span>
+                                                <span className="item-cost">₹{item.estimatedCost.toLocaleString()}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
+                            </div>
+                            <div className="budget-total">
+                                <span>Total Estimated Budget</span>
+                                <span className="total-amount">₹{estimatedTotal.toLocaleString()}</span>
                             </div>
                         </div>
                     )}
 
-                    {msg.data.followUps && msg.data.followUps.length > 0 && (
-                        <div className="follow-up-suggestions">
-                            {msg.data.followUps.map((fu, idx) => (
-                                <button
-                                    key={idx}
-                                    className="btn-suggestion"
-                                    onClick={() => {
-                                        setInputValue(fu.itemToAdd);
-                                        // Auto-send can be implemented here
-                                    }}
-                                >
-                                    Add {fu.itemToAdd}?
-                                </button>
-                            ))}
+                    {items && items.length > 0 && (
+                        <div className="timeline-generator">
+                            <div className="timeline-header">
+                                <Calendar size={16} /> Recommended Event Timeline
+                            </div>
+                            <div className="timeline-steps">
+                                <div className="t-step"><div className="t-icon"></div><p><b>2 Weeks Before:</b> Confirm Venue & Requirements</p></div>
+                                <div className="t-step"><div className="t-icon"></div><p><b>1 Week Before:</b> Finalize participants & Guest Mementos</p></div>
+                                <div className="t-step"><div className="t-icon"></div><p><b>1 Day Before:</b> Setup Equipment & Decorations</p></div>
+                                <div className="t-step final"><div className="t-icon"></div><p><b>Event Day:</b> Execution & Logistic Support</p></div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -157,9 +358,28 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                 <div className="header-info">
                     <Sparkles className="sparkle-icon" size={20} />
                     <div className="status-dot"></div>
-                    <h3>AI Planning Assistant</h3>
+                    <div>
+                        <h3>AI Planning Assistant</h3>
+                        <div className="progress-steps text-xs text-gray-400 mt-1 flex gap-2">
+                            <span className={stepCount >= 0 ? 'text-indigo-600 font-medium' : ''}>1. Info</span> {'>'}
+                            <span className={stepCount >= 4 ? 'text-indigo-600 font-medium' : ''}>2. Requirements</span> {'>'}
+                            <span className={!currentKey ? 'text-indigo-600 font-medium' : ''}>3. Budget</span>
+                        </div>
+                    </div>
                 </div>
-                <button className="reset-btn" onClick={() => setMessages([{ id: '1', text: "Hello! What event should we plan today?", sender: 'ai', type: 'text' }])}>
+                <button className="reset-btn" onClick={() => {
+                    setCurrentKey('eventName');
+                    setStepCount(0);
+                    setEventData({
+                        eventName: '', eventType: '', participants: 50, days: 1, isInternal: true,
+                        venue: 'seminar', laptopType: 'laptop', softwareRequired: false, softwareType: 'free', softwareCost: 0,
+                        resourcePerson: false, resourcePersonType: 'internal', honorarium: 0, guestAccommodation: false,
+                        guestTravel: false, travelExpense: 0, participantFood: 'Refreshments', certification: true
+                    });
+                    setAnalysis(null);
+                    setSelectedItems([]);
+                    setMessages([{ id: '1', text: QUESTION_NODES['eventName'].text, sender: 'ai', type: 'text' }]);
+                }}>
                     <RefreshCw size={14} />
                 </button>
             </div>
@@ -188,13 +408,20 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                 <div ref={chatEndRef} />
             </div>
 
-            {selectedItems.length > 0 && (
+            {analysis && (
                 <div className="current-summary">
                     <div className="summary-badges">
-                        <span className="badge-count">{selectedItems.length} items planned</span>
-                        <button className="apply-trigger" onClick={handleApply}>
-                            Proceed to Budget <ChevronRight size={14} />
-                        </button>
+                        <span className="badge-count">{selectedItems.length} items verified</span>
+                        <div className="flex gap-2">
+                            <button className="btn btn-secondary text-sm px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 flex items-center gap-1" onClick={() => {
+                                setInputValue("Professional Video Coverage");
+                            }}>
+                                <Plus size={14} /> Add Item
+                            </button>
+                            <button className="apply-trigger" onClick={handleApply}>
+                                Proceed to Budget Planning <ChevronRight size={14} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -202,10 +429,11 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
             <form className="chat-input-area" onSubmit={handleSendMessage}>
                 <input
                     type="text"
-                    placeholder="Type your response..."
+                    placeholder={analysis ? "Need something else? Just ask..." : "Type your response..."}
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     disabled={loading}
+                    autoFocus
                 />
                 <button type="submit" className="send-btn" disabled={!inputValue.trim() || loading}>
                     <Send size={18} />

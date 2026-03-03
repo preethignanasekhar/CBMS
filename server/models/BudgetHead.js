@@ -20,25 +20,6 @@ const budgetHeadSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: [
-      'laboratory_equipment',
-      'software',
-      'laboratory_furniture',
-      'maintenance_spares',
-      'research_development',
-      'placement_training',
-      'faculty_development',
-      'seminar_conference',
-      'valuation_curricular',
-      'alumni_interaction',
-      'staff_welfare',
-      'printing_stationery',
-      'postage_expenses',
-      'refreshment_expenses',
-      'functions',
-      'travelling_expenses',
-      'other'
-    ],
     required: [true, 'Budget head category is required'],
     default: 'other'
   },

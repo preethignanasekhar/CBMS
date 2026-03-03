@@ -1,20 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { allocationAPI } from '../services/api';
-import { Download, FileSpreadsheet, FileText, AlertCircle } from 'lucide-react';
+import { allocationAPI, financialYearAPI } from '../services/api';
+import { Download, FileSpreadsheet, FileText, AlertCircle, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import PageHeader from '../components/Common/PageHeader';
 import './YearComparison.scss';
 
 const YearComparison = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
+  const [financialYears, setFinancialYears] = useState([]);
   const [filters, setFilters] = useState({
     currentYear: '2024-25',
     previousYear: '2023-24'
   });
+
+  useEffect(() => {
+    fetchFinancialYears();
+  }, []);
+
+  const fetchFinancialYears = async () => {
+    try {
+      const response = await financialYearAPI.getFinancialYears();
+      const years = response.data.data.financialYears.map(fy => fy.year);
+      setFinancialYears(years);
+    } catch (err) {
+      console.error('Error fetching financial years:', err);
+    }
+  };
+
+  const handleDateToFY = (e, filterName) => {
+    const date = new Date(e.target.value);
+    if (isNaN(date.getTime())) return;
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    setFilters(prev => ({
+      ...prev,
+      [filterName]: `${startYear}-${startYear + 1}`
+    }));
+  };
 
   useEffect(() => {
     fetchComparisonData();
@@ -469,10 +497,10 @@ const YearComparison = () => {
 
   return (
     <div className="year-comparison-container">
-      <div className="year-comparison-header">
-        <h1>Year-over-Year Comparison</h1>
-        <p>Compare budget allocations and spending between financial years</p>
-      </div>
+      <PageHeader
+        title="Year-over-Year Comparison"
+        subtitle="Compare budget allocations and spending between financial years"
+      />
 
       {error && (
         <div className="error-message">
@@ -482,34 +510,55 @@ const YearComparison = () => {
 
       <div className="year-comparison-controls">
         <div className="year-selectors">
-          <div className="year-selector">
+          <div className="year-selector-group">
             <label htmlFor="currentYear">Current Year</label>
-            <select
-              id="currentYear"
-              name="currentYear"
-              value={filters.currentYear}
-              onChange={handleFilterChange}
-              className="year-select"
-            >
-              <option value="2024-25">2024-25</option>
-              <option value="2023-24">2023-24</option>
-              <option value="2022-23">2022-23</option>
-            </select>
+            <div className="flexible-year-input">
+              <input
+                list="fy-suggestions"
+                id="currentYear"
+                name="currentYear"
+                value={filters.currentYear}
+                onChange={handleFilterChange}
+                className="year-input"
+                placeholder="e.g. 2024-25"
+              />
+              <div className="date-picker-helper" title="Choose date to set Year">
+                <Calendar size={18} />
+                <input
+                  type="date"
+                  onChange={(e) => handleDateToFY(e, 'currentYear')}
+                  className="hidden-date-picker"
+                />
+              </div>
+            </div>
           </div>
-          <div className="year-selector">
+          <div className="year-selector-group">
             <label htmlFor="previousYear">Previous Year</label>
-            <select
-              id="previousYear"
-              name="previousYear"
-              value={filters.previousYear}
-              onChange={handleFilterChange}
-              className="year-select"
-            >
-              <option value="2023-24">2023-24</option>
-              <option value="2022-23">2022-23</option>
-              <option value="2021-22">2021-22</option>
-            </select>
+            <div className="flexible-year-input">
+              <input
+                list="fy-suggestions"
+                id="previousYear"
+                name="previousYear"
+                value={filters.previousYear}
+                onChange={handleFilterChange}
+                className="year-input"
+                placeholder="e.g. 2023-24"
+              />
+              <div className="date-picker-helper" title="Choose date to set Year">
+                <Calendar size={18} />
+                <input
+                  type="date"
+                  onChange={(e) => handleDateToFY(e, 'previousYear')}
+                  className="hidden-date-picker"
+                />
+              </div>
+            </div>
           </div>
+          <datalist id="fy-suggestions">
+            {financialYears.map(year => (
+              <option key={year} value={year} />
+            ))}
+          </datalist>
         </div>
 
         <div className="export-actions">

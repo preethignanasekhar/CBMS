@@ -356,6 +356,61 @@
   cursor: pointer;
 }
 
+.flexible-year-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: 0 0.75rem;
+  position: relative;
+  transition: all 0.2s ease;
+  height: 42px;
+
+  &:focus-within {
+    border-color: var(--primary);
+    background: white;
+  }
+
+  .year-input {
+    border: none !important;
+    background: transparent !important;
+    width: 100%;
+    padding: 0 !important;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+
+  .fy-search-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    width: 30px;
+    height: 28px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s, transform 0.15s;
+
+    &:hover {
+      background: var(--primary-hover);
+      transform: scale(1.08);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+  }
+}
+
 /* Summary Grid */
 .summary-grid {
   display: grid;

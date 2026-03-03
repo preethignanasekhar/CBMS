@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { settingsAPI, systemAPI } from '../services/api';
+import { settingsAPI, systemAPI, financialYearAPI } from '../services/api';
 import PageHeader from '../components/Common/PageHeader';
 import ContentCard from '../components/Common/ContentCard';
-import { Settings as SettingsIcon, IndianRupee, Bell, Shield, Server, RotateCcw, Save, Database, AlertTriangle, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, IndianRupee, Bell, Shield, Server, RotateCcw, Save, Database, AlertTriangle, Loader2, Calendar } from 'lucide-react';
 import './Settings.scss';
 
 const Settings = () => {
@@ -15,6 +15,7 @@ const Settings = () => {
   const [formData, setFormData] = useState({});
   const [bulkSetupLoading, setBulkSetupLoading] = useState(false);
   const [bulkSetupResult, setBulkSetupResult] = useState(null);
+  const [financialYears, setFinancialYears] = useState([]);
 
   const tabs = [
     { id: 'general', label: 'General', icon: <SettingsIcon /> },
@@ -27,7 +28,32 @@ const Settings = () => {
   useEffect(() => {
     fetchSettings();
     fetchSystemInfo();
+    fetchFinancialYears();
   }, []);
+
+  const fetchFinancialYears = async () => {
+    try {
+      const response = await financialYearAPI.getFinancialYears();
+      setFinancialYears(response.data.data.financialYears.map(fy => fy.year));
+    } catch (err) {
+      console.error('Error fetching financial years:', err);
+    }
+  };
+
+  const handleDateToFY = (e, field) => {
+    const date = new Date(e.target.value);
+    if (isNaN(date.getTime())) return;
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    setFormData(prev => ({
+      ...prev,
+      general: {
+        ...prev.general,
+        [field]: `${startYear}-${startYear + 1}`
+      }
+    }));
+  };
 
   const fetchSettings = async () => {
     try {
@@ -209,26 +235,53 @@ const Settings = () => {
                   <div className="form-row">
                     <div className="form-group">
                       <label htmlFor="academicYear">Academic Year</label>
-                      <input
-                        type="text"
-                        id="academicYear"
-                        name="academicYear"
-                        value={formData?.general?.academicYear || ''}
-                        onChange={handleInputChange}
-                        className="form-input"
-                      />
+                      <div className="flexible-year-input">
+                        <input
+                          type="text"
+                          id="academicYear"
+                          name="academicYear"
+                          list="fy-suggestions"
+                          value={formData?.general?.academicYear || ''}
+                          onChange={handleInputChange}
+                          className="form-input"
+                        />
+                        <div className="date-picker-helper" title="Choose date to set Year">
+                          <Calendar size={18} />
+                          <input
+                            type="date"
+                            onChange={(e) => handleDateToFY(e, 'academicYear')}
+                            className="hidden-date-picker"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="form-group">
                       <label htmlFor="financialYear">Financial Year</label>
-                      <input
-                        type="text"
-                        id="financialYear"
-                        name="financialYear"
-                        value={formData?.general?.financialYear || ''}
-                        onChange={handleInputChange}
-                        className="form-input"
-                      />
+                      <div className="flexible-year-input">
+                        <input
+                          type="text"
+                          id="financialYear"
+                          name="financialYear"
+                          list="fy-suggestions"
+                          value={formData?.general?.financialYear || ''}
+                          onChange={handleInputChange}
+                          className="form-input"
+                        />
+                        <datalist id="fy-suggestions">
+                          {financialYears.map(year => (
+                            <option key={year} value={year} />
+                          ))}
+                        </datalist>
+                        <div className="date-picker-helper" title="Choose date to set Year">
+                          <Calendar size={18} />
+                          <input
+                            type="date"
+                            onChange={(e) => handleDateToFY(e, 'financialYear')}
+                            className="hidden-date-picker"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
 

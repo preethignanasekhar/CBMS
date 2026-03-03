@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { reportAPI, departmentsAPI, budgetHeadsAPI, usersAPI } from '../services/api';
-import { Receipt, IndianRupee, PieChart, ClipboardList, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { reportAPI, departmentsAPI, budgetHeadsAPI, usersAPI, financialYearAPI } from '../services/api';
+import { Receipt, IndianRupee, PieChart, ClipboardList, Download, FileSpreadsheet, FileText, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import PageHeader from '../components/Common/PageHeader';
 import './Reports.scss';
 
 const Reports = () => {
@@ -12,7 +13,7 @@ const Reports = () => {
   const [reportData, setReportData] = useState(null);
   const [reportType, setReportType] = useState('expenditures');
   const [filters, setFilters] = useState({
-    format: 'json',
+    format: 'pdf',
     startDate: '',
     endDate: '',
     departmentId: '',
@@ -25,6 +26,7 @@ const Reports = () => {
   const [departments, setDepartments] = useState([]);
   const [budgetHeads, setBudgetHeads] = useState([]);
   const [users, setUsers] = useState([]);
+  const [financialYears, setFinancialYears] = useState([]);
 
   useEffect(() => {
     fetchMasterData();
@@ -32,15 +34,17 @@ const Reports = () => {
 
   const fetchMasterData = async () => {
     try {
-      const [departmentsRes, budgetHeadsRes, usersRes] = await Promise.all([
+      const [departmentsRes, budgetHeadsRes, usersRes, yearsRes] = await Promise.all([
         departmentsAPI.getDepartments(),
         budgetHeadsAPI.getBudgetHeads(),
-        usersAPI.getUsers({ limit: 1000 })
+        usersAPI.getUsers({ limit: 1000 }),
+        financialYearAPI.getFinancialYears()
       ]);
 
       setDepartments(departmentsRes.data.data.departments);
       setBudgetHeads(budgetHeadsRes.data.data.budgetHeads);
       setUsers(usersRes.data.data.users);
+      setFinancialYears(yearsRes.data.data.financialYears || []);
     } catch (err) {
       console.error('Error fetching master data:', err);
     }
@@ -163,15 +167,56 @@ const Reports = () => {
           });
         }
       });
-    } else if (reportType === 'allocations') {
+    } else if (reportType === 'allocations' && data.allocations) {
       exportData = data.allocations.map(alloc => ({
         'Financial Year': alloc.financialYear,
-        'Department': alloc.department.name,
-        'Budget Head': alloc.budgetHead.name,
+        'Department': alloc.department?.name || 'N/A',
+        'Budget Head': alloc.budgetHead?.name || 'N/A',
         'Allocated Amount': alloc.allocatedAmount,
         'Spent Amount': alloc.spentAmount,
         'Remaining Amount': alloc.remainingAmount,
         'Utilization %': Math.round((alloc.spentAmount / alloc.allocatedAmount) * 100)
+      }));
+    } else if (reportType === 'dashboard') {
+      const consolidated = data.consolidated || data;
+      exportData.push({
+        'Metric': 'Total Allocated',
+        'Value': consolidated.totalAllocated
+      });
+      exportData.push({
+        'Metric': 'Total Spent',
+        'Value': consolidated.totalSpent
+      });
+      exportData.push({
+        'Metric': 'Total Remaining',
+        'Value': consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent)
+      });
+      exportData.push({
+        'Metric': 'Utilization %',
+        'Value': consolidated.utilizationPercentage
+      });
+
+      if (consolidated.departmentBreakdown) {
+        exportData.push({}); // Empty row
+        exportData.push({ 'Metric': 'DEPARTMENT BREAKDOWN' });
+        Object.entries(consolidated.departmentBreakdown).forEach(([dept, d]) => {
+          exportData.push({
+            'Metric': dept,
+            'Allocated': d.allocated,
+            'Spent': d.spent,
+            'Remaining': d.remaining,
+            'Utilization %': d.utilization
+          });
+        });
+      }
+    } else if (reportType === 'audit' && data.auditLogs) {
+      exportData = data.auditLogs.map(log => ({
+        'Timestamp': new Date(log.createdAt).toLocaleString(),
+        'Event Type': log.eventType,
+        'Actor': log.actor?.name || 'System',
+        'Role': log.actor?.role || 'N/A',
+        'Entity': log.targetEntity,
+        'ID': log.targetId
       }));
     }
 
@@ -212,7 +257,7 @@ const Reports = () => {
           ]);
         });
       });
-    } else if (reportType === 'allocations') {
+    } else if (reportType === 'allocations' && data.allocations) {
       columns = ['FY', 'Dept', 'Budget Head', 'Allocated', 'Spent', 'Remaining'];
       rows = data.allocations.map(alloc => [
         alloc.financialYear,
@@ -221,6 +266,53 @@ const Reports = () => {
         formatCurrency(alloc.allocatedAmount),
         formatCurrency(alloc.spentAmount),
         formatCurrency(alloc.remainingAmount)
+      ]);
+    } else if (reportType === 'dashboard') {
+      const consolidated = data.consolidated || data;
+      columns = ['Category', 'Amount'];
+      rows = [
+        ['Total Allocated', formatCurrency(consolidated.totalAllocated)],
+        ['Total Spent', formatCurrency(consolidated.totalSpent)],
+        ['Total Remaining', formatCurrency(consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent))],
+        ['Utilization %', `${(consolidated.utilizationPercentage || 0).toFixed(2)}%`]
+      ];
+
+      doc.autoTable({
+        head: [columns],
+        body: rows,
+        startY: 40,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] }
+      });
+
+      if (consolidated.departmentBreakdown) {
+        doc.text('Department Breakdown', 14, doc.lastAutoTable.finalY + 15);
+        const deptCols = ['Department', 'Allocated', 'Spent', 'Remaining', 'Util %'];
+        const deptRows = Object.entries(consolidated.departmentBreakdown).map(([name, d]) => [
+          name,
+          formatCurrency(d.allocated),
+          formatCurrency(d.spent),
+          formatCurrency(d.remaining),
+          `${(d.utilization || 0).toFixed(2)}%`
+        ]);
+
+        doc.autoTable({
+          head: [deptCols],
+          body: deptRows,
+          startY: doc.lastAutoTable.finalY + 20,
+          theme: 'grid',
+          headStyles: { fillColor: [79, 70, 229] }
+        });
+      }
+      doc.save(fileName);
+      return; // Handled specially
+    } else if (reportType === 'audit' && data.auditLogs) {
+      columns = ['Date', 'Event', 'Actor', 'Entity'];
+      rows = data.auditLogs.map(log => [
+        new Date(log.createdAt).toLocaleDateString(),
+        log.eventType,
+        log.actor?.name || 'System',
+        log.targetEntity
       ]);
     }
 
@@ -518,10 +610,10 @@ const Reports = () => {
 
   return (
     <div className="reports-container">
-      <div className="reports-header">
-        <h1>Reports & Analytics</h1>
-        <p>Generate comprehensive reports for budget allocations and expenditures</p>
-      </div>
+      <PageHeader
+        title="Reports & Analytics"
+        subtitle="Generate comprehensive reports for budget allocations and expenditures"
+      />
 
       {error && (
         <div className="error-message">
@@ -576,10 +668,9 @@ const Reports = () => {
                 onChange={handleFilterChange}
                 className="filter-select"
               >
-                <option value="json">JSON (View)</option>
+                <option value="pdf">PDF (Download)</option>
                 <option value="csv">CSV (Download)</option>
                 <option value="excel">Excel (Download)</option>
-                <option value="pdf">PDF (Download)</option>
               </select>
             </div>
 
@@ -659,17 +750,37 @@ const Reports = () => {
 
             <div className="filter-group">
               <label htmlFor="financialYear">Financial Year</label>
-              <select
-                id="financialYear"
-                name="financialYear"
-                value={filters.financialYear}
-                onChange={handleFilterChange}
-                className="filter-select"
-              >
-                <option value="2024-25">2024-25</option>
-                <option value="2023-24">2023-24</option>
-                <option value="2022-23">2022-23</option>
-              </select>
+              <div className="flexible-year-input">
+                <input
+                  list="fy-suggestions"
+                  id="financialYear"
+                  name="financialYear"
+                  value={filters.financialYear}
+                  onChange={handleFilterChange}
+                  className="filter-input"
+                  placeholder="e.g. 2025-2026"
+                />
+                <datalist id="fy-suggestions">
+                  {financialYears.map(fy => (
+                    <option key={fy._id} value={fy.year} />
+                  ))}
+                </datalist>
+                <div className="date-picker-helper" title="Choose date to set Year">
+                  <Calendar size={18} />
+                  <input
+                    type="date"
+                    onChange={(e) => {
+                      const date = new Date(e.target.value);
+                      if (isNaN(date.getTime())) return;
+                      const month = date.getMonth();
+                      const year = date.getFullYear();
+                      const startYear = month >= 3 ? year : year - 1;
+                      setFilters(prev => ({ ...prev, financialYear: `${startYear}-${startYear + 1}` }));
+                    }}
+                    className="hidden-date-picker"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -692,35 +803,37 @@ const Reports = () => {
         </div>
       </div>
 
-      {reportData && filters.format === 'json' && (
-        <div className="report-results">
-          {reportType === 'expenditures' && renderExpenditureReport()}
-          {reportType === 'allocations' && renderAllocationReport()}
-          {reportType === 'dashboard' && renderDashboardReport()}
-          {reportType === 'audit' && (
-            <div className="report-content">
-              <div className="report-summary">
-                <h3>Audit Summary</h3>
-                <div className="summary-grid">
-                  <div className="summary-item">
-                    <span className="label">Total Logs:</span>
-                    <span className="value">{reportData.summary.totalLogs}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="label">Event Types:</span>
-                    <span className="value">{Object.keys(reportData.summary.logsByEventType).length}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="label">Actor Roles:</span>
-                    <span className="value">{Object.keys(reportData.summary.logsByActorRole).length}</span>
+      {
+        reportData && filters.format === 'json' && (
+          <div className="report-results">
+            {reportType === 'expenditures' && renderExpenditureReport()}
+            {reportType === 'allocations' && renderAllocationReport()}
+            {reportType === 'dashboard' && renderDashboardReport()}
+            {reportType === 'audit' && (
+              <div className="report-content">
+                <div className="report-summary">
+                  <h3>Audit Summary</h3>
+                  <div className="summary-grid">
+                    <div className="summary-item">
+                      <span className="label">Total Logs:</span>
+                      <span className="value">{reportData.summary.totalLogs}</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="label">Event Types:</span>
+                      <span className="value">{Object.keys(reportData.summary.logsByEventType).length}</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="label">Actor Roles:</span>
+                      <span className="value">{Object.keys(reportData.summary.logsByActorRole).length}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            )}
+          </div>
+        )
+      }
+    </div >
   );
 };
 

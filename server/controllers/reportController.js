@@ -43,6 +43,10 @@ const getExpenditureReport = async (req, res) => {
       query.status = status;
     }
 
+    if (financialYear) {
+      query.financialYear = financialYear;
+    }
+
     // Get expenditures with populated data
     const expenditures = await Expenditure.find(query)
       .populate('department', 'name code')
@@ -304,27 +308,27 @@ const getDashboardReport = async (req, res) => {
     // Calculate consolidated statistics
     const consolidated = {
       financialYear: currentFY,
-      // 1. Requested Amount (sum of all pending + approved event requests)
+      // 1. Total Pipeline Amount (sum of all pending, verified, approved, and finalized requests)
       totalRequested: expenditures
-        .filter(exp => ['pending', 'verified', 'approved'].includes(exp.status))
+        .filter(exp => ['pending', 'verified', 'approved', 'finalized'].includes(exp.status))
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
       // 2. Approved Budget (Total allocations for the department)
       totalAllocated: allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0),
 
-      // 3. Utilized Amount (Finalized Phase 2 events only)
+      // 3. Utilized Amount (Committed funds: Verified, Approved, or Finalized)
       totalUtilized: expenditures
-        .filter(exp => exp.status === 'finalized')
+        .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
-      // 4. Pending Amount (events under verification/approval - NOT deducted)
+      // 4. Pending Amount (events under initial submission - NOT yet verified)
       totalPending: expenditures
-        .filter(exp => ['pending', 'verified', 'approved'].includes(exp.status))
+        .filter(exp => exp.status === 'pending')
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
       // Legacy field for compatibility if needed elsewhere
       remainingBalance: (allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0)) -
-        (expenditures.filter(exp => exp.status === 'finalized').reduce((sum, exp) => sum + (exp.totalAmount || 0), 0)),
+        (expenditures.filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status)).reduce((sum, exp) => sum + (exp.totalAmount || 0), 0)),
 
       // Support for status breakdown count
       statusBreakdown: {
@@ -370,7 +374,7 @@ const getDashboardReport = async (req, res) => {
 
     const dailyExpenditures = expenditures.filter(exp => {
       const eventDate = new Date(exp.eventDate);
-      return eventDate >= today && eventDate < tomorrow && ['approved', 'finalized'].includes(exp.status);
+      return eventDate >= today && eventDate < tomorrow && ['verified', 'approved', 'finalized'].includes(exp.status);
     });
 
     consolidated.dailyTotal = dailyExpenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0);
@@ -434,10 +438,10 @@ const getDashboardReport = async (req, res) => {
       const deptData = consolidated.departmentBreakdown[deptName];
 
       // Monetary metrics
-      if (['pending', 'verified', 'approved'].includes(exp.status)) {
+      if (exp.status === 'pending') {
         deptData.requested += amount;
         deptData.pending += amount;
-      } else if (exp.status === 'finalized') {
+      } else if (['verified', 'approved', 'finalized'].includes(exp.status)) {
         deptData.requested += amount;
         deptData.utilized += amount;
       }
@@ -551,7 +555,7 @@ const getAuditReport = async (req, res) => {
 
     // Get audit logs with populated data
     const auditLogs = await AuditLog.find(query)
-      .populate('actorId', 'name email role')
+      .populate('actor', 'name email role')
       .sort({ createdAt: -1 })
       .limit(1000); // Limit to prevent large responses
 

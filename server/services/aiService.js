@@ -582,110 +582,155 @@ const axios = require('axios');
  * @param {string} eventDescription - Free-text description of the event
  * @returns {Object} Analysis result with checklist and follow-ups
  */
-/**
- * Fallback AI Analysis logic (Node.js based)
- * Used when the Python AI service is unavailable.
- */
-const fallbackAnalyzeEvent = (eventName, eventDescription) => {
-    const combinedText = `${eventName} ${eventDescription}`.toLowerCase();
-    const detectedComponents = [];
-    const followUps = [];
-    let nextQuestion = null;
+const fallbackAnalyzeEvent = (payload) => {
+    const {
+        eventName = "",
+        eventType = "event",
+        participants = 50,
+        days = 1,
+        isInternal = true,
+        venue = "seminar",
+        softwareRequired = false,
+        softwareType = "free",
+        softwareCost = 0,
+        labOrLaptop = "laptop",
+        resourcePerson = false,
+        resourcePersonType = "internal",
+        honorarium = 0,
+        guestAccommodation = false,
+        guestTravel = false,
+        travelExpense = 0,
+        participantFood = "None",
+        certification = true
+    } = payload;
+    const combinedText = `${eventName} ${eventType}`.toLowerCase();
 
-    const keywords = {
-        "Resource Person / Chief Guest": ["guest", "speaker", "expert", "resource person", "chief guest", "lecturer", "trainer", "special guest", "keynote", "mentor", "judge"],
-        "Event Venue": ["auditorium", "seminar hall", "outdoor", "ground", "hall", "room", "venue", "stadium", "conference room", "classroom", "lab", "theatre"],
-        "Sound System": ["audio", "speaker", "mic", "microphone", "sound", "pa system", "amplifier", "handheld mic", "collar mic", "podium mic"],
-        "Stage Setup": ["stage", "podium", "backdrop", "dais", "decoration", "lighting", "screen setup", "banner stand", "table cloths", "frills"],
-        "Printing": ["banner", "certificate", "poster", "brochure", "pamphlet", "invitation", "printing", "flex banner", "flyer", "notepads", "pen", "documents"],
-        "Food": ["lunch", "dinner", "meal", "buffet", "catering", "food", "lunch packets", "working lunch", "non-veg", "veg"],
-        "Refreshments": ["snacks", "tea", "coffee", "high tea", "breakfast", "refreshments", "biscuits", "water bottles", "juice", "cool drinks"],
-        "Decorations": ["flower", "bouquet", "carpet", "lighting", "ribbon", "decor", "shamiana", "scenery", "stage decoration", "balloons", "welcome arch"],
-        "Technical Equipment": ["projector", "laptop", "wifi", "internet", "computer", "system", "screen", "pointer", "extension box", "ups", "generator", "hdmi"],
-        "Transportation": ["bus", "car", "taxi", "travel", "transport", "pickup", "drop", "van", "commute", "fuel", "driver allowance", "conveyance"],
-        "Accommodation": ["stay", "hotel", "room", "lodging", "accommodation", "guest house", "hostel", "dormitory", "boarding"],
-        "Photography & Video": ["photo", "video", "camera", "photography", "videography", "media", "drone", "event coverage", "live stream"],
-        "Registration Kit": ["registration", "kit", "bag", "file", "folder", "id card", "badge", "tag", "lanyard", "enrollment"],
-        "Mementos & Gifts": ["memento", "gift", "trophy", "medal", "shawl", "presents", "award", "prize", "momento", "souvenir", "certificate frame"],
-        "Logistic Support": ["security", "cleaning", "housekeeping", "manpower", "volunteers", "student coordinators", "helpers", "labor"]
-    };
-
-    for (const [component, kws] of Object.entries(keywords)) {
-        if (kws.some(kw => combinedText.includes(kw))) {
-            detectedComponents.push(component);
-        }
-    }
+    const items = [];
 
     const isWorkshop = ["workshop", "training", "hands-on", "bootcamp", "practical"].some(kw => combinedText.includes(kw));
-    const isGuestEvent = ["guest", "speaker", "expert", "lecturer", "resource", "keynote"].some(kw => combinedText.includes(kw));
-    const isConference = ["conference", "symposium", "seminar", "summit", "meetup", "conclave"].some(kw => combinedText.includes(kw));
+    const isSeminar = ["seminar", "talk", "guest lecture", "webinar", "conference", "symposium", "summit", "meetup", "conclave"].some(kw => combinedText.includes(kw));
+    const isCultural = ["cultural", "fest", "drama", "dance", "music", "competition"].some(kw => combinedText.includes(kw));
 
-    // Conversational Logic & Follow-ups
+    // Venue Selection
+    if (venue === "seminar" || String(venue).toLowerCase().includes("seminar hall")) {
+        items.push({ name: "Seminar Hall Booking", quantity: 1, estimatedCost: days * 5000, priority: "Essential", category: "Venue" });
+        items.push({ name: "Projector & Sound System", quantity: 1, estimatedCost: days * 2000, priority: "Essential", category: "Technical Equipment" });
+        items.push({ name: "Stage Setup & Seating", quantity: 1, estimatedCost: 3000, priority: "Optional", category: "Decorations" });
+    } else if (venue === "lab") {
+        items.push({ name: "Lab Venue Booking", quantity: 1, estimatedCost: days * 3000, priority: "Essential", category: "Venue" });
+    } else {
+        items.push({ name: "Event Venue Booking", quantity: 1, estimatedCost: days * 5000, priority: "Essential", category: "Venue" });
+    }
+
+    // Dynamic suggestions based on event nature
     if (isWorkshop) {
-        if (!detectedComponents.includes("Event Venue")) detectedComponents.push("Event Venue");
-        if (!detectedComponents.includes("Refreshments")) detectedComponents.push("Refreshments");
-        if (!detectedComponents.includes("Technical Equipment")) detectedComponents.push("Technical Equipment");
-        if (!detectedComponents.includes("Printing")) detectedComponents.push("Printing");
+        items.push({ name: "Workshop Materials / Kits", quantity: participants, estimatedCost: participants * 300, priority: "Essential", category: "Printing" });
 
-        // Specific Software Logic
-        if (combinedText.includes("software") || combinedText.includes("tool") || combinedText.includes("app")) {
-            if (!combinedText.includes("installed") && !combinedText.includes("yes") && !combinedText.includes("no")) {
-                nextQuestion = "Is the specific software required for this workshop already installed on the computers?";
-            } else if (combinedText.includes("no") && !combinedText.includes("payed") && !combinedText.includes("paid") && !combinedText.includes("free")) {
-                nextQuestion = "Understood. Will this be a paid licensed software or is it open-source/free?";
-            } else if (combinedText.includes("paid") || combinedText.includes("payed")) {
-                if (!detectedComponents.includes("Software License")) detectedComponents.push("Software License");
-                nextQuestion = "Got it. I've added 'Software License' to your checklist. Anything else about technical setup?";
-            }
-        } else {
-            nextQuestion = "Great choice! For this workshop, will you be using any specific software or technical tools?";
+        if (!isInternal) {
+            items.push({ name: "Registration Desk Setup", quantity: 1, estimatedCost: 1500, priority: "Optional", category: "Logistic Support" });
         }
+    } else if (isSeminar) {
+        items.push({ name: "Guest Memento & Shawl", quantity: days > 1 ? 2 : 1, estimatedCost: (days > 1 ? 2 : 1) * 1000, priority: "Essential", category: "Mementos & Gifts" });
+        items.push({ name: "Stage Flower Setup", quantity: 1, estimatedCost: 2000, priority: "Optional", category: "Decorations" });
 
-        followUps.push({
-            trigger: "Workshop detected",
-            question: "Need budget for Printing notepads, pens and training kits?",
-            category: "Printing",
-            itemToAdd: "Stationery (Notepads/Pens)"
-        });
+        if (!isInternal) {
+            items.push({ name: "Welcome Arch", quantity: 1, estimatedCost: 3500, priority: "Luxury", category: "Decorations" });
+        }
+    } else if (isCultural) {
+        items.push({ name: "Stage Lighting & Sound", quantity: 1, estimatedCost: days * 15000, priority: "Essential", category: "Technical Equipment" });
+        items.push({ name: "Stage Decoration & Frills", quantity: 1, estimatedCost: 10000, priority: "Essential", category: "Decorations" });
+        items.push({ name: "Security & Volunteers Staff", quantity: 5, estimatedCost: days * 3000, priority: "Essential", category: "Logistic Support" });
+        items.push({ name: "Prizes / Trophies / Medals", quantity: 15, estimatedCost: 12000, priority: "Essential", category: "Mementos & Gifts" });
+        items.push({ name: "Professional Video Coverage", quantity: 1, estimatedCost: days * 10000, priority: "Luxury", category: "Photography & Video" });
+        items.push({ name: "Event T-Shirts", quantity: 20, estimatedCost: 6000, priority: "Optional", category: "Printing" });
+    } else {
+        // Generic defaults for any other unclassified event
+        items.push({ name: "Flex Banner (Main Stage)", quantity: 1, estimatedCost: 1500, priority: "Optional", category: "Printing" });
+        items.push({ name: "Notepads & Pens", quantity: participants, estimatedCost: participants * 40, priority: "Optional", category: "Printing" });
+        items.push({ name: "Professional Photographer", quantity: 1, estimatedCost: days * 5000, priority: "Luxury", category: "Photography & Video" });
     }
 
-    if (isConference) {
-        ["Photography & Video", "Mementos & Gifts", "Registration Kit"].forEach(item => {
-            if (!detectedComponents.includes(item)) detectedComponents.push(item);
-        });
+    if (!isInternal) {
+        items.push({ name: "Local Conveyance/Transport", quantity: 1, estimatedCost: days * 1500, priority: "Optional", category: "Transportation" });
     }
 
-    if (isGuestEvent && !nextQuestion) {
-        followUps.push({
-            trigger: "Guest speaker detected",
-            question: "Should we include a Bouquet, Shawl and Memento for the guest?",
-            category: "Mementos & Gifts",
-            itemToAdd: "Guest Welcome Kit (Shawl/Bouquet)"
-        });
-        nextQuestion = "For the guest speaker, would you like to arrange a formal welcome kit (Shawl/Bouquet)?";
+    // --- Technical Planning (Software & Hardware) ---
+    if (softwareRequired) {
+        if (softwareType === "paid") {
+            items.push({ name: "Commercial Software License", quantity: 1, estimatedCost: softwareCost, priority: "Essential", category: "Technical Equipment" });
+        } else {
+            items.push({ name: "Software Installation Support", quantity: 1, estimatedCost: days * 1000, priority: "Essential", category: "Logistic Support" });
+            items.push({ name: "Technical Setup Team", quantity: 2, estimatedCost: days * 1500, priority: "Essential", category: "Logistic Support" });
+        }
     }
 
-    const budgetSuggestions = [];
-    if (detectedComponents.includes("Food") || detectedComponents.includes("Refreshments")) budgetSuggestions.push("Catering & Refreshments");
-    if (detectedComponents.includes("Printing")) budgetSuggestions.push("Printing & Stationery");
-    if (detectedComponents.includes("Technical Equipment")) budgetSuggestions.push("Technical Expenses");
-    if (detectedComponents.includes("Software License")) budgetSuggestions.push("Technical Expenses");
-    if (isGuestEvent) budgetSuggestions.push("Guest Remuneration");
+    if (labOrLaptop === 'lab') {
+        items.push({ name: "Lab Maintenance & System Readiness Check", quantity: 1, estimatedCost: days * 2000, priority: "Essential", category: "Technical Equipment" });
+        items.push({ name: "Lab Technical Support", quantity: 1, estimatedCost: days * 1000, priority: "Essential", category: "Logistic Support" });
+    } else if (labOrLaptop === 'laptop') {
+        items.push({ name: "High-Speed Wi-Fi Provision", quantity: 1, estimatedCost: days * 1000, priority: "Essential", category: "Technical Equipment" });
+        items.push({ name: "Charging Points & Extension Boards", quantity: Math.ceil(participants / 5), estimatedCost: Math.ceil(participants / 5) * 300, priority: "Essential", category: "Technical Equipment" });
+    }
+
+    // --- Resource Planning (Guest/Resource Person) ---
+    if (resourcePerson) {
+        items.push({ name: "Resource Person Honorarium", quantity: days, estimatedCost: honorarium > 0 ? honorarium : (days * 5000), priority: "Essential", category: "Guest Remuneration" });
+        items.push({ name: "Guest Momento & Welcome Frame", quantity: 1, estimatedCost: 1500, priority: "Essential", category: "Mementos & Gifts" });
+        items.push({ name: "Resource Person Food Allowance", quantity: days, estimatedCost: days * 1000, priority: "Essential", category: "Food" });
+
+        if (resourcePersonType === 'external') {
+            if (guestAccommodation) {
+                items.push({ name: "Guest Accommodation (Premium)", quantity: days, estimatedCost: days * 3000, priority: "Optional", category: "Accommodation" });
+            }
+            if (guestTravel) {
+                items.push({ name: "Guest Travel Expense", quantity: 1, estimatedCost: travelExpense > 0 ? travelExpense : 5000, priority: "Essential", category: "Transportation" });
+            }
+        }
+    }
+
+    // --- Participant Food Planning ---
+    const foodLower = String(participantFood).toLowerCase();
+    if (foodLower !== "none" && foodLower !== "") {
+        if (foodLower.includes("breakfast") || foodLower.includes("all")) {
+            items.push({ name: "Participant Breakfast", quantity: participants * days, estimatedCost: participants * days * 100, priority: "Essential", category: "Food" });
+        }
+        if (foodLower.includes("lunch") || foodLower.includes("all") || foodLower.includes("food")) {
+            items.push({ name: "Participant Lunch", quantity: participants * days, estimatedCost: participants * days * 200, priority: "Essential", category: "Food" });
+        }
+        if (foodLower.includes("dinner") || foodLower.includes("all")) {
+            items.push({ name: "Participant Dinner", quantity: participants * days, estimatedCost: participants * days * 250, priority: "Essential", category: "Food" });
+        }
+        if (foodLower.includes("refreshments") || foodLower.includes("snacks") || foodLower.includes("tea") || foodLower.includes("all")) {
+            items.push({ name: "Tea & Refreshments", quantity: participants * days * 2, estimatedCost: participants * days * 100, priority: "Essential", category: "Food" });
+        }
+    }
+
+    // --- Certification & Logistics ---
+    if (certification) {
+        items.push({ name: "Participant Certificates", quantity: participants, estimatedCost: participants * 25, priority: "Essential", category: "Printing" });
+    }
+
+    const estimatedTotal = items.reduce((sum, item) => sum + item.estimatedCost, 0);
+    const categoryList = [...new Set(items.map(i => i.category))];
 
     return {
         status: 'success',
         isFallback: true,
         analysis: {
             eventName,
-            detectedComponents: detectedComponents,
-            durationDays: 1,
+            eventType,
+            participants,
+            days,
+            isInternal,
             isWorkshop,
-            isGuestEvent
+            isSeminar,
+            isCultural
         },
-        checklist: [...new Set(detectedComponents)],
-        followUps,
-        budgetSuggestions: [...new Set(budgetSuggestions)],
-        nextQuestion: nextQuestion || (detectedComponents.length > 0 ? "I've suggested some items based on your event. Does this look good, or should we add more?" : "Could you tell me a bit more about what you'll need for this event?")
+        items,
+        estimatedTotal,
+        budgetSuggestions: categoryList,
+        checklist: items.map(i => i.name),
+        nextQuestion: null
     };
 };
 
@@ -697,21 +742,18 @@ const fallbackAnalyzeEvent = (eventName, eventDescription) => {
  * @param {string} eventDescription - Free-text description of the event
  * @returns {Object} Analysis result with checklist and follow-ups
  */
-const analyzeEventRequirements = async (eventName, eventDescription) => {
+const analyzeEventRequirements = async (payload) => {
     try {
         const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
 
-        console.log(`[AI-Event] Analyzing event: "${eventName}" via ${pythonServiceUrl}`);
+        console.log(`[AI-Event] Analyzing event: "${payload.eventName}" via ${pythonServiceUrl}`);
 
-        const response = await axios.post(`${pythonServiceUrl}/analyze-event`, {
-            eventName,
-            eventDescription
-        });
+        const response = await axios.post(`${pythonServiceUrl}/analyze-event`, payload);
 
         return response.data;
     } catch (error) {
         console.error('Error calling AI Event Analysis service, using Node.js fallback:', error.message);
-        return fallbackAnalyzeEvent(eventName, eventDescription);
+        return fallbackAnalyzeEvent(payload);
     }
 };
 

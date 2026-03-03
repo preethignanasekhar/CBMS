@@ -108,6 +108,61 @@
   background: rgba(255, 255, 255, 0.8);
 }
 
+.flexible-year-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: 0 0.75rem;
+  position: relative;
+  transition: all 0.2s ease;
+  height: 42px;
+
+  &:focus-within {
+    border-color: var(--primary);
+    background: white;
+  }
+
+  .year-input {
+    border: none !important;
+    background: transparent !important;
+    width: 100%;
+    padding: 0 !important;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+
+  .date-picker-helper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    color: var(--primary);
+    cursor: pointer;
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: scale(1.1);
+    }
+
+    .hidden-date-picker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0 !important;
+      cursor: pointer;
+      z-index: 2;
+    }
+  }
+}
+
 /* Table */
 .allocations-table-container {
   background: var(--glass-bg);
@@ -1636,25 +1691,24 @@
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
 }
 
-.charts-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 2rem;
-  margin: 2rem 0;
+.charts-section.single-chart {
+  grid-template-columns: 1fr;
 }
 
-.chart-container {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.chart-container.full-width {
+  width: 100%;
+  min-height: 580px;
+  padding: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 .chart-container h3 {
-  margin: 0 0 1.5rem 0;
-  color: #333;
-  font-size: 1.1rem;
-  font-weight: 600;
+  margin: 0 0 2rem 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 1rem;
 }
 
 /* Alerts */

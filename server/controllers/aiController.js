@@ -234,16 +234,16 @@ const getDashboardSummary = async (req, res) => {
  */
 const analyzeEvent = async (req, res) => {
     try {
-        const { eventName, eventDescription } = req.body;
+        const payload = req.body;
 
-        if (!eventName) {
+        if (!payload.eventName) {
             return res.status(400).json({
                 success: false,
                 message: 'Event name is required'
             });
         }
 
-        const analysis = await aiService.analyzeEventRequirements(eventName, eventDescription);
+        const analysis = await aiService.analyzeEventRequirements(payload);
 
         res.json({
             success: true,

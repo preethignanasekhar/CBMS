@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ReactECharts from 'echarts-for-react';
-import { expenditureAPI, budgetProposalAPI, allocationAPI, reportAPI } from '../services/api';
+import { expenditureAPI, budgetProposalAPI, allocationAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { CheckCircle, Paperclip, Check, X, ArrowRight, Wallet, PieChart, FileText, CreditCard, AlertCircle, Clock, Eye } from 'lucide-react';
+import { CheckCircle, Paperclip, Check, X, ArrowRight, Wallet, PieChart, FileText, CreditCard, AlertCircle, Clock, Eye, IndianRupee, TrendingUp, ShieldCheck, Calendar, RefreshCw } from 'lucide-react';
+import { getCurrentFinancialYear } from '../utils/dateUtils';
 import PageHeader from '../components/Common/PageHeader';
 import StatusBadge from '../components/Common/StatusBadge';
 import StatCard from '../components/Common/StatCard';
 import ContentCard from '../components/Common/ContentCard';
+import FloatingAIChat from '../components/AI/FloatingAIChat';
 import './HODDashboard.scss';
 
 const HODDashboard = () => {
@@ -28,26 +29,40 @@ const HODDashboard = () => {
   const [previousYearStats, setPreviousYearStats] = useState({});
 
   const { socket } = useSocket();
+  const [financialYears, setFinancialYears] = useState([]);
+  const [targetYear, setTargetYear] = useState(getCurrentFinancialYear());
   const [statusFilter] = useState('pending'); // Action Zone: Only Pending Verification
   const [dashboardData, setDashboardData] = useState({
     stats: {
-      requested: { value: 0 },
-      approved: { value: 0 },
-      utilized: { value: 0 },
-      pending: { value: 0 }
+      totalAllocated: 0,
+      totalUtilized: 0,
+      totalRemaining: 0
     }
   });
-  const [barChartOption, setBarChartOption] = useState({});
-  const [pieChartOption, setPieChartOption] = useState({});
-  const [eventChartOption, setEventChartOption] = useState({});
-  const [hasBarData, setHasBarData] = useState(false);
-  const [hasPieData, setHasPieData] = useState(false);
-  const [hasEventData, setHasEventData] = useState(false);
-  const [overallChartOption, setOverallChartOption] = useState({});
 
   useEffect(() => {
     fetchData();
-  }, [statusFilter]);
+    fetchFinancialYears();
+  }, [statusFilter, targetYear]);
+
+  const fetchFinancialYears = async () => {
+    try {
+      const response = await financialYearAPI.getFinancialYears();
+      const years = response?.data?.data?.financialYears || [];
+      setFinancialYears(Array.isArray(years) ? years.map(fy => fy.year) : []);
+    } catch (err) {
+      console.error('Error fetching financial years:', err);
+    }
+  };
+
+  const handleDateToFY = (e) => {
+    const date = new Date(e.target.value);
+    if (isNaN(date.getTime())) return;
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    setTargetYear(`${startYear}-${startYear + 1}`);
+  };
 
   // Real-time updates
   useEffect(() => {
@@ -87,8 +102,7 @@ const HODDashboard = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const currentYear = getCurrentFinancialYear();
-      const response = await reportAPI.getDashboardReport({ financialYear: currentYear });
+      const response = await reportAPI.getDashboardReport({ financialYear: targetYear });
       if (response?.data?.success) {
         const consolidated = response?.data?.data?.consolidated;
         if (consolidated) processDashboardData(consolidated);
@@ -101,161 +115,19 @@ const HODDashboard = () => {
   const processDashboardData = (data) => {
     setDashboardData({
       stats: {
-        requested: { value: data.totalRequested || 0 },
-        approved: { value: data.totalAllocated || 0 },
-        utilized: { value: data.totalUtilized || 0 },
-        pending: { value: data.totalPending || 0 }
+        totalAllocated: data.totalAllocated || 0,
+        totalUtilized: data.totalUtilized || 0,
+        totalRemaining: Math.max(0, (data.totalAllocated || 0) - (data.totalUtilized || 0))
       }
     });
-
-    // Monthly Trend Chart
-    const financialYear = data.financialYear || getCurrentFinancialYear();
-    const startYear = parseInt(financialYear.split('-')[0]);
-    const trendMap = data.monthlyTrend || {};
-
-    const monthNames = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
-    const monthlySpending = [];
-    const orderedMonthsISO = [
-      `${startYear}-04`, `${startYear}-05`, `${startYear}-06`,
-      `${startYear}-07`, `${startYear}-08`, `${startYear}-09`,
-      `${startYear}-10`, `${startYear}-11`, `${startYear}-12`,
-      `${startYear + 1}-01`, `${startYear + 1}-02`, `${startYear + 1}-03`
-    ];
-
-    orderedMonthsISO.forEach(key => {
-      monthlySpending.push(trendMap[key] || 0);
-    });
-
-    setHasBarData(monthlySpending.some(v => v > 0));
-
-    setBarChartOption({
-      tooltip: {
-        trigger: 'axis',
-        confine: true,
-        formatter: (params) => {
-          const item = params[0];
-          return `<b>${item.name}</b><br/>Total: ₹${item.value.toLocaleString('en-IN')}`;
-        }
-      },
-      grid: { left: '10%', right: '10%', bottom: '15%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        data: monthNames,
-        axisLabel: { color: '#374151', fontWeight: '600' }
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: {
-          formatter: (v) => {
-            if (v === 0) return '₹0';
-            const kValue = v / 1000;
-            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
-          }
-        }
-      },
-      series: [{
-        name: 'Spending',
-        type: 'line',
-        smooth: true,
-        data: monthlySpending,
-        areaStyle: { opacity: 0.1 },
-        itemStyle: { color: '#2563eb' }
-      }]
-    });
-
-    // Recent Events Chart (Requested: Show X-axis labels (dates/events))
-    const recentEvents = data.recentEvents || [];
-    setHasEventData(recentEvents.length > 0);
-
-    setEventChartOption({
-      tooltip: {
-        trigger: 'item',
-        confine: true,
-        formatter: (params) => {
-          const ev = recentEvents[params.dataIndex];
-          return `<b>${ev.name}</b><br/>Date: ${new Date(ev.date).toLocaleDateString()}<br/>Amount: <b>₹${ev.amount.toLocaleString('en-IN')}</b>`;
-        }
-      },
-      grid: { left: '8%', right: '8%', bottom: '30%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        data: recentEvents.map(e => e.name.substring(0, 15) + (e.name.length > 15 ? '...' : '')),
-        axisLabel: {
-          interval: 0,
-          rotate: 45,
-          color: '#1f2937',
-          fontWeight: '700',
-          fontSize: 10
-        }
-      },
-      yAxis: { type: 'value' },
-      series: [{
-        name: 'Event Expenditure',
-        type: 'bar',
-        data: recentEvents.map(e => e.amount),
-        itemStyle: {
-          color: (params) => ['#3b82f6', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6'][params.dataIndex % 5],
-          borderRadius: [4, 4, 0, 0]
-        },
-        barWidth: 30
-      }]
-    });
-
-    // Budget Head Distribution
-    const bhBreakdown = data.budgetHeadBreakdown || {};
-    const pieData = Object.keys(bhBreakdown).map((name, index) => ({
-      value: bhBreakdown[name].spent,
-      name: name
-    })).filter(item => item.value > 0);
-
-    setHasPieData(pieData.length > 0);
-
-    setPieChartOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', confine: true },
-      series: [{
-        type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['50%', '50%'],
-        data: pieData,
-        itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 }
-      }]
-    });
-
-    // Overall Budget Status Chart (Unexpended vs Utilized)
-    const totalAllocated = data.totalAllocated || 0;
-    const totalUtilized = data.totalUtilized || 0;
-    const totalRemaining = Math.max(0, totalAllocated - totalUtilized);
-
-    setOverallChartOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      series: [{
-        type: 'pie',
-        radius: ['55%', '75%'],
-        center: ['50%', '50%'],
-        avoidLabelOverlap: false,
-        label: { show: false, position: 'center' },
-        emphasis: { label: { show: true, fontSize: '18', fontWeight: 'bold' } },
-        labelLine: { show: false },
-        data: [
-          { value: totalUtilized, name: 'Utilized', itemStyle: { color: '#2563eb' } },
-          { value: totalRemaining, name: 'Unexpended', itemStyle: { color: '#e2e8f0' } }
-        ]
-      }]
-    });
-  };
-
-  const getCurrentFinancialYear = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    return month >= 4 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
   };
 
   const fetchExpenditures = async () => {
     try {
       const params = {
         departmentId: user.department?._id || user.department,
-        status: statusFilter
+        status: statusFilter,
+        financialYear: targetYear
       };
 
       // If pending, we specifically want items waiting for HOD
@@ -275,7 +147,8 @@ const HODDashboard = () => {
     try {
       setProposalsLoading(true);
       const params = {
-        department: user.department?._id || user.department
+        department: user.department?._id || user.department,
+        financialYear: targetYear
       };
 
       // Map dashboard filter to proposal status
@@ -439,109 +312,42 @@ const HODDashboard = () => {
       <PageHeader
         title="HOD Dashboard"
         subtitle="Overview of departmental budget allocation, proposals, and event expenditures"
-      />
+      >
+        <button className="btn btn-secondary flex items-center gap-2" onClick={fetchData}>
+          <RefreshCw size={18} /> Refresh Dashboard
+        </button>
+      </PageHeader>
 
       <div className="stats-grid-4 mb-5">
         <StatCard
-          title="Total Requested"
-          value={formatCurrency(dashboardData.stats.requested.value)}
-          icon={<FileText size={20} />}
-          subtitle="Pending Event Requests"
+          title="Total Budget"
+          value={formatCurrency(dashboardData.stats.totalAllocated)}
+          icon={<IndianRupee size={24} />}
+          subtitle="Annual Allocation"
         />
         <StatCard
-          title="Approved Budget"
-          value={formatCurrency(dashboardData.stats.approved.value)}
-          icon={<CheckCircle size={20} />}
-          subtitle="Annual Allocated Fund"
-        />
-        <StatCard
-          title="Utilized Amount"
-          value={formatCurrency(dashboardData.stats.utilized.value)}
-          icon={<CreditCard size={20} />}
+          title="Utilized Fund"
+          value={formatCurrency(dashboardData.stats.totalUtilized)}
+          icon={<TrendingUp size={24} />}
           color="var(--success)"
-          subtitle="Finalized Expenditures"
+          subtitle="Finalized Expenses"
         />
         <StatCard
-          title="Pending Amount"
-          value={formatCurrency(dashboardData.stats.pending.value)}
-          icon={<Clock size={20} />}
+          title="Pending Queue"
+          value={(expenditures.length + proposals.length)}
+          icon={<Clock size={24} />}
           isPending={true}
-          subtitle="Awaiting Final Sanction"
+          subtitle="Awaiting Your Review"
+        />
+        <StatCard
+          title="Unspent Balance"
+          value={formatCurrency(dashboardData.stats.totalRemaining)}
+          icon={<Wallet size={24} />}
+          subtitle={`Available for Sanction (${targetYear})`}
         />
       </div>
 
-      <div className="charts-grid">
-        <div className="card-standard chart-card">
-          <div className="card-standard-header">
-            <h3>Budget Utilization (Finalized)</h3>
-            <p>Utilized vs Unexpended Budget</p>
-          </div>
-          <div className="chart-container" style={{ height: '380px' }}>
-            <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-              <ReactECharts option={overallChartOption} style={{ height: '100%', width: '100%' }} />
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Utilized</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>
-                  {dashboardData.stats.approved.value > 0
-                    ? Math.round((dashboardData.stats.utilized.value / dashboardData.stats.approved.value) * 100)
-                    : 0}%
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div className="card-standard chart-card">
-          <div className="card-standard-header">
-            <h3>Expenditure Trend (Finalized)</h3>
-            <p>Monthly spending pattern</p>
-          </div>
-          <div className="chart-container" style={{ height: '380px' }}>
-            {hasBarData ? (
-              <ReactECharts option={barChartOption} style={{ height: '100%', width: '100%' }} />
-            ) : (
-              <div className="no-data-display">
-                <AlertCircle size={40} />
-                <p>No finalized expenditure trend data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="card-standard chart-card">
-          <div className="card-standard-header">
-            <h3>Budget Head Utilization</h3>
-            <p>Spending by category</p>
-          </div>
-          <div className="chart-container" style={{ height: '380px' }}>
-            {hasPieData ? (
-              <ReactECharts option={pieChartOption} style={{ height: '100%', width: '100%' }} />
-            ) : (
-              <div className="no-data-display">
-                <AlertCircle size={40} />
-                <p>No utilization data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="card-standard chart-card">
-          <div className="card-standard-header">
-            <h3>Recent Event Expenditures</h3>
-            <p>Recent finalized event costs</p>
-          </div>
-          <div className="chart-container" style={{ height: '380px' }}>
-            {hasEventData ? (
-              <ReactECharts option={eventChartOption} style={{ height: '100%', width: '100%' }} />
-            ) : (
-              <div className="no-data-display">
-                <AlertCircle size={40} />
-                <p>No recent events data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
 
       {error && (
         <div className="error-message mb-4">
@@ -636,23 +442,13 @@ const HODDashboard = () => {
         </div>
       </div>
 
-      <div className="quick-management mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="quick-management mt-4">
         <div className="card-standard">
-          <h3>Reports & Analytics</h3>
-          <p className="text-sm text-gray-500 mb-4">Generate comprehensive reports for budget allocations and expenditures.</p>
+          <h3>Graphical Dashboard</h3>
+          <p className="text-sm text-gray-500 mb-4">View detailed departmental analytics, budget charts, and localized reports.</p>
           <div className="flex gap-2">
-            <button onClick={() => navigate('/reports')} className="btn btn-secondary flex items-center gap-2">
-              <FileText size={18} /> View Reports
-            </button>
-          </div>
-        </div>
-
-        <div className="card-standard">
-          <h3>Year-over-Year Comparison</h3>
-          <p className="text-sm text-gray-500 mb-4">Compare budget allocations and spending between financial years.</p>
-          <div className="flex gap-2">
-            <button onClick={() => navigate('/year-comparison')} className="btn btn-secondary flex items-center gap-2">
-              <CreditCard size={18} /> View Comparison
+            <button onClick={() => navigate('/hod-analytics')} className="btn btn-secondary flex items-center gap-2">
+              <PieChart size={18} /> View Visual Analytics
             </button>
           </div>
         </div>
@@ -864,6 +660,9 @@ const HODDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* AI Chat Integration */}
+      <FloatingAIChat />
     </div>
   );
 };

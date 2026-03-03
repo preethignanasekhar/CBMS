@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { allocationAPI, expenditureAPI, reportAPI } from '../services/api';
+import { allocationAPI, expenditureAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { RefreshCw, AlertCircle, Wallet, TrendingUp, PiggyBank, Percent } from 'lucide-react';
+import { RefreshCw, AlertCircle, Wallet, TrendingUp, PiggyBank, Percent, Calendar } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import './GraphicalDashboard.scss';
 
@@ -14,20 +14,41 @@ const GraphicalDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [yearComparison, setYearComparison] = useState(null);
-  const [timeRange, setTimeRange] = useState('current');
-  const [refreshInterval, setRefreshInterval] = useState(null);
-
   const currentFY = getCurrentFinancialYear();
-  const previousFY = getPreviousFinancialYear();
+  const [targetYear, setTargetYear] = useState(currentFY);
+  const [financialYears, setFinancialYears] = useState([]);
 
   const { socket } = useSocket();
+
+  useEffect(() => {
+    fetchFinancialYears();
+  }, []);
+
+  const fetchFinancialYears = async () => {
+    try {
+      const response = await financialYearAPI.getFinancialYears();
+      const yearsData = response?.data?.data?.financialYears || [];
+      const years = Array.isArray(yearsData) ? yearsData.map(fy => fy.year) : [];
+      setFinancialYears(years);
+    } catch (err) {
+      console.error('Error fetching financial years:', err);
+    }
+  };
+
+  const handleDateToFY = (e) => {
+    const date = new Date(e.target.value);
+    if (isNaN(date.getTime())) return;
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    setTargetYear(`${startYear}-${startYear + 1}`);
+  };
 
   useEffect(() => {
     fetchDashboardData();
 
     // Set up auto-refresh every 30 seconds (fallback)
     const interval = setInterval(fetchDashboardData, 30000);
-    setRefreshInterval(interval);
 
     // Real-time updates
     if (socket) {
@@ -46,26 +67,24 @@ const GraphicalDashboard = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timeRange, socket]);
+  }, [targetYear, socket]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
 
-      const targetFY = timeRange === 'current' ? currentFY : previousFY;
-
       const [allocationResponse, expenditureResponse, reportResponse, comparisonReportResponse] = await Promise.all([
         allocationAPI.getAllocations({
           departmentId: ['department', 'hod'].includes(user.role) ? (user.department?._id || user.department) : undefined,
-          financialYear: targetFY
+          financialYear: targetYear
         }),
         expenditureAPI.getExpenditures({
-          departmentId: user.role === 'department' ? user.department : undefined,
-          status: 'finalized'
+          departmentId: ['department', 'hod'].includes(user.role) ? (user.department?._id || user.department) : undefined,
+          financialYear: targetYear
         }),
         reportAPI.getDashboardReport({
           departmentId: ['department', 'hod'].includes(user.role) ? (user.department?._id || user.department) : undefined,
-          financialYear: targetFY
+          financialYear: targetYear
         }),
         // Fetch year comparison data for current year
         reportAPI.getDashboardReport({
@@ -82,8 +101,9 @@ const GraphicalDashboard = () => {
       });
 
       // Set year comparison data if available
-      if (comparisonReportResponse.data.data.consolidated.yearComparison) {
-        setYearComparison(comparisonReportResponse.data.data.consolidated.yearComparison);
+      const comparisonData = comparisonReportResponse?.data?.data?.consolidated?.yearComparison;
+      if (comparisonData) {
+        setYearComparison(comparisonData);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -112,10 +132,31 @@ const GraphicalDashboard = () => {
     }
 
     const allocations = dashboardData.allocations;
-    const labels = allocations.map(allocation => allocation.budgetHeadName);
-    const allocatedData = allocations.map(allocation => allocation.allocatedAmount);
-    const spentData = allocations.map(allocation => allocation.spentAmount);
-    const remainingData = allocations.map(allocation => allocation.remainingAmount);
+    const expenditures = dashboardData.expenditures || [];
+
+    // For each allocation, find related expenditures to calculate localized Spent amount
+    // as the DB spentAmount only updates on finalization.
+    const budgetHeadStats = allocations.map(allocation => {
+      const bhId = allocation.budgetHeadId || allocation.budgetHead?._id || allocation.budgetHead;
+      const headSpent = expenditures
+        .filter(e => {
+          const eBhId = e.budgetHead?._id || e.budgetHead;
+          return eBhId.toString() === bhId.toString() && ['verified', 'approved', 'finalized'].includes(e.status);
+        })
+        .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+
+      return {
+        name: allocation.budgetHeadName || allocation.budgetHead?.name,
+        allocated: allocation.allocatedAmount,
+        spent: headSpent,
+        remaining: Math.max(0, allocation.allocatedAmount - headSpent)
+      };
+    });
+
+    const labels = budgetHeadStats.map(s => s.name);
+    const allocatedData = budgetHeadStats.map(s => s.allocated);
+    const spentData = budgetHeadStats.map(s => s.spent);
+    const remainingData = budgetHeadStats.map(s => s.remaining);
 
     return {
       tooltip: {
@@ -172,10 +213,20 @@ const GraphicalDashboard = () => {
     }
 
     const departments = [...new Set(dashboardData.allocations.map(a => a.departmentName))];
+    const expenditures = dashboardData.expenditures || [];
+
     const departmentData = departments.map(dept => {
       const deptAllocations = dashboardData.allocations.filter(a => a.departmentName === dept);
       const totalAllocated = deptAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
-      const totalSpent = deptAllocations.reduce((sum, a) => sum + a.spentAmount, 0);
+
+      // Sum expenditures for this department
+      const totalSpent = expenditures
+        .filter(e => {
+          const eDeptName = e.department?.name || (typeof e.department === 'string' ? e.department : null);
+          return eDeptName === dept && ['verified', 'approved', 'finalized'].includes(e.status);
+        })
+        .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+
       return {
         department: dept,
         utilization: totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0
@@ -217,16 +268,18 @@ const GraphicalDashboard = () => {
       return null;
     }
 
-    // Group expenditures by month
+    // Group expenditures by month (only verified/approved/finalized)
     const monthlyData = {};
-    dashboardData.expenditures.forEach(exp => {
-      const date = exp.eventDate || exp.billDate;
-      const month = new Date(date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-      if (!monthlyData[month]) {
-        monthlyData[month] = 0;
-      }
-      monthlyData[month] += (exp.totalAmount || 0);
-    });
+    dashboardData.expenditures
+      .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
+      .forEach(exp => {
+        const date = exp.eventDate || exp.billDate;
+        const month = new Date(date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+        if (!monthlyData[month]) {
+          monthlyData[month] = 0;
+        }
+        monthlyData[month] += (exp.totalAmount || 0);
+      });
 
     const sortedMonths = Object.keys(monthlyData).sort((a, b) => {
       const dateA = new Date(a);
@@ -392,7 +445,10 @@ const GraphicalDashboard = () => {
     const expenditures = dashboardData.expenditures;
 
     const totalAllocated = allocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
-    const totalSpent = expenditures.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+    // Include verified/approved/finalized in Spent for dashboard responsiveness
+    const totalSpent = expenditures
+      .filter(e => ['verified', 'approved', 'finalized'].includes(e.status))
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
     const totalRemaining = totalAllocated - totalSpent;
     const utilizationPercentage = totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0;
 
@@ -430,11 +486,29 @@ const GraphicalDashboard = () => {
           subtitle="Real-time budget analytics and insights"
         >
           <div className="time-range-selector">
-            <label>Time Range:</label>
-            <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)}>
-              <option value="current">Current Year ({currentFY})</option>
-              <option value="previous">Previous Year ({previousFY})</option>
-            </select>
+            <label>Financial Year:</label>
+            <div className="flexible-year-input">
+              <input
+                list="fy-suggestions"
+                value={targetYear}
+                onChange={(e) => setTargetYear(e.target.value)}
+                className="year-input"
+                placeholder="e.g. 2025-2026"
+              />
+              <datalist id="fy-suggestions">
+                {financialYears.map(year => (
+                  <option key={year} value={year} />
+                ))}
+              </datalist>
+              <div className="date-picker-helper" title="Choose date to set Year">
+                <Calendar size={18} />
+                <input
+                  type="date"
+                  onChange={handleDateToFY}
+                  className="hidden-date-picker"
+                />
+              </div>
+            </div>
           </div>
           <button className="refresh-btn" onClick={fetchDashboardData}>
             <RefreshCw size={16} />

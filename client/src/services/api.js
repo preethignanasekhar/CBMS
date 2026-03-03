@@ -238,10 +238,16 @@ export const reportAPI = {
       ...(isCsv ? { responseType: 'blob' } : {})
     });
   },
-  getAllocationReport: (params) => api.get('/reports/allocations', { params }),
+  getAllocationReport: (params) => api.get('/reports/allocations', {
+    params,
+    ...(params?.format === 'csv' ? { responseType: 'blob' } : {})
+  }),
   getDashboardReport: (params) => api.get('/reports/dashboard', { params }),
   getBudgetProposalReport: (params) => api.get('/reports/proposals', { params }),
-  getAuditReport: (params) => api.get('/reports/audit', { params }),
+  getAuditReport: (params) => api.get('/reports/audit', {
+    params,
+    ...(params?.format === 'csv' ? { responseType: 'blob' } : {})
+  }),
   getBudgetUtilizationDashboard: (params) => api.get('/consolidated-reports/utilization', { params }),
   getFundUtilizationTrend: (params) => api.get('/consolidated-reports/trend', { params }),
 };

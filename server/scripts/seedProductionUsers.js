@@ -24,7 +24,7 @@ const EMAIL_DOMAIN = 'bms.edu.in';
 // Department definitions
 const departments = [
     { code: 'AIDS', name: 'Artificial Intelligence and Data Science' },
-    { code: 'AIML', name: 'Artificial Intelligence and Machine Learning' },
+    { code: 'AIML', name: 'AIML' },
     { code: 'AUTO', name: 'Automobile Engineering' },
     { code: 'CIVIL', name: 'Civil Engineering' },
     { code: 'CSE', name: 'Computer Science' },

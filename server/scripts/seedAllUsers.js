@@ -37,7 +37,7 @@ async function seedAllUsers() {
             { name: 'B.E Mechanical Engineering', code: 'MECH', description: 'Mechanical Engineering Department' },
             { name: 'B.Tech Information Technology', code: 'IT', description: 'Information Technology Department' },
             { name: 'B.Tech Artificial Intelligence and Data Science', code: 'AIDS', description: 'Artificial Intelligence and Data Science Department' },
-            { name: 'B.Tech Artificial Intelligence and Machine Learning', code: 'AIML', description: 'Artificial Intelligence and Machine Learning Department' }
+            { name: 'AIML', code: 'AIML', description: 'AIML Department' }
         ];
 
         const createdDepts = [];

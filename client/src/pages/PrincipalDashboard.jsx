@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { budgetProposalAPI, expenditureAPI, reportAPI } from '../services/api';
+import { budgetProposalAPI, expenditureAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear } from '../utils/dateUtils';
@@ -15,7 +15,9 @@ import {
     FileText,
     TrendingUp,
     AlertCircle,
-    Check
+    Check,
+    RefreshCw,
+    Calendar
 } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
@@ -31,21 +33,25 @@ const PrincipalDashboard = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [financialYears, setFinancialYears] = useState([]);
+    const [targetYear, setTargetYear] = useState(getCurrentFinancialYear());
     const { socket } = useSocket();
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-            const currentYear = getCurrentFinancialYear();
-            const [proposalsRes, expendituresRes, reportRes] = await Promise.all([
-                budgetProposalAPI.getBudgetProposals({ status: 'verified_by_hod' }),
-                expenditureAPI.getExpenditures({ status: 'verified' }), // Verified by HOD, waiting for Principal
-                reportAPI.getDashboardReport({ financialYear: currentYear })
+            const [proposalsRes, expendituresRes, reportRes, yearsRes] = await Promise.all([
+                budgetProposalAPI.getBudgetProposals({ status: 'verified_by_hod', financialYear: targetYear }),
+                expenditureAPI.getExpenditures({ status: 'verified', financialYear: targetYear }), // Verified by HOD, waiting for Principal
+                reportAPI.getDashboardReport({ financialYear: targetYear }),
+                financialYearAPI.getFinancialYears()
             ]);
 
             setProposals(proposalsRes.data.data.proposals || []);
             setExpenditures(expendituresRes.data.data.expenditures || []);
             setStats(reportRes.data.data.consolidated);
+            const years = yearsRes.data.data.financialYears || [];
+            setFinancialYears(Array.isArray(years) ? years.map(fy => fy.year) : []);
             setError(null);
         } catch (err) {
             console.error('Error fetching principal dashboard data:', err);
@@ -53,11 +59,20 @@ const PrincipalDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [targetYear]);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const handleDateToFY = (e) => {
+        const date = new Date(e.target.value);
+        if (isNaN(date.getTime())) return;
+        const month = date.getMonth();
+        const year = date.getFullYear();
+        const startYear = month >= 3 ? year : year - 1;
+        setTargetYear(`${startYear}-${startYear + 1}`);
+    };
 
     useEffect(() => {
         if (!socket) return;
@@ -91,7 +106,11 @@ const PrincipalDashboard = () => {
             <PageHeader
                 title="Management Dashboard"
                 subtitle="Approval Queue & Financial Oversight"
-            />
+            >
+                <button className="btn btn-secondary flex items-center gap-2" onClick={fetchData}>
+                    <RefreshCw size={18} /> Refresh Dashboard
+                </button>
+            </PageHeader>
 
             {error && <div className="error-message">{error}</div>}
 
@@ -121,10 +140,12 @@ const PrincipalDashboard = () => {
                         title="Unspent Balance"
                         value={formatCurrency(stats.remainingBalance)}
                         icon={<Wallet size={24} />}
-                        subtitle="Available for Sanction"
+                        subtitle={`Institutional Balance (${targetYear})`}
                     />
                 </div>
             )}
+
+
 
             <div className="approvals-section">
                 <div className="section-header">

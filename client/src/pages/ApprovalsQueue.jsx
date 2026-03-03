@@ -34,13 +34,18 @@ const ApprovalsQueue = () => {
 
       const propParams = { ...filters };
       if (filters.status === 'pending_approval') {
-        const adminRoles = ['principal', 'vice_principal', 'office', 'admin'];
-        if (adminRoles.includes(user.role)) {
-          // Admins see all submitted/active items in the queue to avoid "empty" views
-          filters.status = 'all';
-          propParams.status = 'all';
+        if (['principal', 'vice_principal'].includes(user.role)) {
+          // Principals only see items that have been verified by HOD
+          propParams.status = 'verified_by_hod,verified';
+          filters.status = 'verified'; // For expenditures
+        } else if (['office', 'admin'].includes(user.role)) {
+          // Office only sees items that have been verified by Principal / Management
+          propParams.status = 'verified_by_principal';
+          filters.status = 'approved'; // For expenditures
         } else if (user.role === 'hod') {
+          // HODs only see new submissions that need their verification
           propParams.status = 'submitted,revised';
+          filters.status = 'pending'; // For expenditures too
         }
       } else {
         propParams.status = getPropStatus();
@@ -130,7 +135,7 @@ const ApprovalsQueue = () => {
     <div className="page-container approvals-queue-container">
       <PageHeader
         title="Approvals Queue"
-        subtitle="Verify and approve departmental budget requests"
+        subtitle="Verify and approve departmental budget requests in this dashboard"
       />
 
       <div className="filters-section mb-4">
@@ -145,18 +150,7 @@ const ApprovalsQueue = () => {
         </div>
         <div className="filter-dropdowns">
           <div className="filter-item">
-            <Filter size={16} />
-            <select
-              className="filter-select"
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            >
-              <option value="pending_approval">Pending My Approval</option>
-              <option value="verified">Verified by HOD</option>
-              <option value="approved">Approved by Principal</option>
-              <option value="finalized">Finalized</option>
-              <option value="rejected">Rejected</option>
-            </select>
+            <span className="text-sm font-medium text-slate-500">Showing only pending requests</span>
           </div>
         </div>
       </div>
@@ -266,7 +260,7 @@ const ApprovalsQueue = () => {
 
                         {/* Office Action: Verify/Approve or Reject */}
                         {
-                          user?.role === 'office' && (
+                          ['office', 'admin'].includes(user?.role) && (
                             <>
                               {/* Expenditure Flow: Office only sanctions items approved by Management */}
                               {item.itemType === 'expenditure' && item.status === 'approved' && (
@@ -276,7 +270,7 @@ const ApprovalsQueue = () => {
                                   </button>
                                 </Tooltip>
                               )}
-                              {item.itemType === 'expenditure' && ['approved'].includes(item.status) && (
+                              {item.itemType === 'expenditure' && item.status === 'approved' && (
                                 <Tooltip text="Reject" position="top">
                                   <button className="btn-icon reject" onClick={() => handleAction(item, 'reject')}>
                                     <X size={16} />
@@ -290,7 +284,7 @@ const ApprovalsQueue = () => {
                                   </button>
                                 </Tooltip>
                               )}
-                              {item.itemType === 'proposal' && ['verified_by_principal'].includes(item.status) && (
+                              {item.itemType === 'proposal' && item.status === 'verified_by_principal' && (
                                 <Tooltip text="Reject" position="top">
                                   <button className="btn-icon reject" onClick={() => handleAction(item, 'reject')}>
                                     <X size={16} />
@@ -301,7 +295,11 @@ const ApprovalsQueue = () => {
                           )
                         }
 
-                        {['approved', 'rejected', 'verified', 'finalized', 'verified_by_hod', 'verified_by_principal'].includes(item.status) && <span className="date-text">-</span>}
+                        {/* Hyphen Fallback - show only if user has no actions on this specific item */}
+                        {!((user?.role === 'hod' && ((item.itemType === 'expenditure' && item.status === 'pending') || (item.itemType === 'proposal' && (item.status === 'submitted' || item.status === 'revised')))) ||
+                          (['vice_principal', 'principal'].includes(user?.role) && ((item.itemType === 'expenditure' && item.status === 'verified') || (item.itemType === 'proposal' && item.status === 'verified_by_hod'))) ||
+                          (['office', 'admin'].includes(user?.role) && ((item.itemType === 'expenditure' && item.status === 'approved') || (item.itemType === 'proposal' && item.status === 'verified_by_principal'))))
+                          && <span className="date-text text-gray-400">-</span>}
                       </div>
                     </td>
                   </tr>
@@ -336,6 +334,7 @@ const ApprovalsQueue = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' }}>
                         <div><span style={{ color: '#6c757d' }}>Event Name:</span> <strong>{selectedItem.eventName}</strong></div>
                         <div><span style={{ color: '#6c757d' }}>Event Type:</span> <strong>{selectedItem.eventType}</strong></div>
+                        <div><span style={{ color: '#6c757d' }}>Budget Head:</span> <strong className="text-info">{selectedItem.budgetHead?.name || 'N/A'}</strong></div>
                         <div><span style={{ color: '#6c757d' }}>Event Date:</span> <strong>{selectedItem.eventDate ? new Date(selectedItem.eventDate).toLocaleDateString() : 'N/A'}</strong></div>
                         <div><span style={{ color: '#6c757d' }}>Total Amount:</span> <strong className="text-primary">{formatCurrency(selectedItem.totalAmount)}</strong></div>
                       </div>

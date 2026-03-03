@@ -156,19 +156,8 @@ const createBudgetProposal = async (req, res) => {
   try {
     const { financialYear, proposalItems, notes } = req.body;
 
-    // Check if a proposal already exists for this department and year
-    const existingProposal = await BudgetProposal.findOne({
-      financialYear,
-      department: req.user.department,
-      status: { $ne: 'rejected' }
-    });
-
-    if (existingProposal && existingProposal.status !== 'draft') {
-      return res.status(400).json({
-        success: false,
-        message: `A proposal already exists for ${financialYear} and is currently ${existingProposal.status}`
-      });
-    }
+    // Allow multiple proposals per department per year so they can request additional heads later.
+    // Removed strict single-proposal restriction here.
 
     const status = req.body.status || 'draft';
     const proposal = await BudgetProposal.create({
@@ -218,23 +207,25 @@ const updateBudgetProposal = async (req, res) => {
       });
     }
 
-    // Only allow updating drafts, revised, or approved proposals
-    if (!['draft', 'revised', 'approved'].includes(proposal.status)) {
+    // Allow updating drafts, revised, or even submitted/approved (which resets them)
+    const editableStatuses = ['draft', 'revised', 'submitted', 'verified_by_hod', 'verified_by_principal', 'approved'];
+    if (!editableStatuses.includes(proposal.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Only draft, revised, or approved proposals can be updated'
+        message: 'This proposal cannot be updated in its current status.'
       });
     }
 
-    // If an approved proposal is edited, it reverts to 'revised' status
-    if (proposal.status === 'approved') {
-      proposal.status = 'revised';
-    }
+    // Force reset if editing an approved/verified proposal or explicitly submitting
+    const isResetRequired = (status === 'submitted') ||
+      (['verified_by_principal', 'approved'].includes(proposal.status) && !['principal', 'vice_principal', 'office', 'admin'].includes(req.user.role));
 
-    // Allow updating status to 'submitted' directly from form
-    if (status === 'submitted' && ['draft', 'revised'].includes(proposal.status)) {
+    if (isResetRequired) {
       proposal.status = 'submitted';
       proposal.submittedDate = new Date();
+      // Reset approval steps and read list for fresh cycle
+      proposal.approvalSteps = [];
+      proposal.readBy = [];
     }
 
     proposal.proposalItems = proposalItems || proposal.proposalItems;
@@ -286,6 +277,10 @@ const submitBudgetProposal = async (req, res) => {
     proposal.status = 'submitted';
     proposal.submittedDate = new Date();
     proposal.lastModifiedBy = req.user._id;
+
+    // Reset approval steps and read list for fresh cycle
+    proposal.approvalSteps = [];
+    proposal.readBy = [];
 
     await proposal.save();
 
@@ -403,20 +398,34 @@ const approveBudgetProposal = async (req, res) => {
             }
           }
 
+          // Safely extract IDs
+          const proposalDeptId = proposal.department._id ? proposal.department._id.toString() : proposal.department.toString();
+          const itemBHId = item.budgetHead._id ? item.budgetHead._id.toString() : item.budgetHead.toString();
+
           // Check if allocation already exists
           const existingAllocation = await Allocation.findOne({
             financialYear: proposal.financialYear,
-            department: proposal.department,
-            budgetHead: item.budgetHead
+            department: proposalDeptId,
+            budgetHead: itemBHId
           });
 
           if (existingAllocation) {
             console.log(`Existing allocation found for ${item.budgetHead}, updating amount to ${finalAmount}`);
 
             const oldAmount = existingAllocation.allocatedAmount;
-            existingAllocation.allocatedAmount = finalAmount;
-            existingAllocation.remarks = item.justification || `Updated from re-approved budget proposal ${proposal._id}`;
+
+            // If from a different new proposal, ADD the funds. If amending the SAME proposal, overwrite.
+            if (existingAllocation.sourceProposalId && existingAllocation.sourceProposalId.toString() !== proposal._id.toString()) {
+              existingAllocation.allocatedAmount = oldAmount + finalAmount;
+              existingAllocation.remarks = existingAllocation.remarks + ' | ' + (item.justification || `Added funds from additional proposal ${proposal._id}`);
+            } else {
+              existingAllocation.allocatedAmount = finalAmount;
+              existingAllocation.remarks = item.justification || `Updated from re-approved budget proposal ${proposal._id}`;
+            }
+
             existingAllocation.lastModifiedBy = req.user._id;
+            // Optionally update the sourceProposalId to the latest one, or keep the original. 
+            // We'll update it to record the latest addition
             existingAllocation.sourceProposalId = proposal._id;
 
             await existingAllocation.save();
@@ -445,11 +454,15 @@ const approveBudgetProposal = async (req, res) => {
             continue;
           }
 
+          // Safely extract IDs
+          const allocDeptId = proposal.department._id ? proposal.department._id.toString() : proposal.department.toString();
+          const allocBHId = item.budgetHead._id ? item.budgetHead._id.toString() : item.budgetHead.toString();
+
           // Create allocation
           const allocation = await Allocation.create({
             financialYear: proposal.financialYear,
-            department: proposal.department,
-            budgetHead: item.budgetHead,
+            department: allocDeptId,
+            budgetHead: allocBHId,
             allocatedAmount: finalAmount,
             remarks: item.justification || 'Created from approved budget proposal',
             sourceProposalId: proposal._id,
@@ -568,14 +581,23 @@ const verifyBudgetProposal = async (req, res) => {
     let nextStatus = '';
 
     if (req.user.role === 'hod') {
-      if (proposal.department.toString() !== req.user.department.toString()) {
+      const propDeptId = proposal.department._id ? proposal.department._id.toString() : proposal.department.toString();
+      const userDeptId = req.user.department._id ? req.user.department._id.toString() : req.user.department.toString();
+      if (propDeptId !== userDeptId) {
         return res.status(403).json({
           success: false,
           message: 'You can only verify proposals from your department'
         });
       }
 
-      if (proposal.status !== 'submitted' && proposal.status !== 'revised') {
+      const resetStatuses = ['approved', 'verified_by_principal', 'verified_by_hod', 'rejected', 'revised'];
+      if (resetStatuses.includes(proposal.status)) {
+        // HOD is acting on something already processed. Clear downstream history.
+        proposal.approvalSteps = proposal.approvalSteps.filter(step =>
+          !['principal', 'vice_principal', 'office'].includes(step.role)
+        );
+        proposal.readBy = [req.user._id];
+      } else if (proposal.status !== 'submitted' && proposal.status !== 'revised') {
         return res.status(400).json({
           success: false,
           message: 'HOD can only verify submitted or revised proposals'
@@ -584,21 +606,20 @@ const verifyBudgetProposal = async (req, res) => {
       nextStatus = 'verified_by_hod';
 
     } else if (['principal', 'vice_principal'].includes(req.user.role)) {
-      if (proposal.status !== 'verified_by_hod' && proposal.status !== 'verified') {
+      if (proposal.status === 'verified_by_principal' || proposal.status === 'approved') {
         return res.status(400).json({
           success: false,
-          message: 'Principal/VP can only verify proposals verified by HOD'
+          message: '[v2-RELOADED] Proposal already has a final decision (Verified by Principal or Approved by Office)'
         });
       }
 
-      // Check if another Principal/VP has already verified (one of them wins)
-      const principalVerified = proposal.approvalSteps.some(step => ['principal', 'vice_principal'].includes(step.role) && step.decision === 'verify');
-      if (principalVerified) {
+      if (proposal.status !== 'verified_by_hod' && proposal.status !== 'verified') {
         return res.status(400).json({
           success: false,
-          message: 'Proposal has already been verified by Principal/VP'
+          message: 'Principal/VP can only verify proposals that are currently in "Verified by HOD" status'
         });
       }
+
       nextStatus = 'verified_by_principal';
     }
 

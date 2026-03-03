@@ -7,7 +7,8 @@ import {
     authAPI,
     departmentsAPI,
     usersAPI,
-    reportAPI
+    reportAPI,
+    financialYearAPI
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -38,7 +39,8 @@ import {
     Users as UsersIcon,
     Crown,
     UserCheck,
-    UserX
+    UserX,
+    Search
 } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
@@ -399,6 +401,38 @@ export const DepartmentDetail = () => {
     const fyMinus2 = getFYMinus2();
 
     const [selectedFinancialYear, setSelectedFinancialYear] = useState(currentFY);
+    const [inputFY, setInputFY] = useState(currentFY); // local input state, not yet committed
+    const [financialYears, setFinancialYears] = useState([]);
+
+    useEffect(() => {
+        fetchFinancialYears();
+    }, []);
+
+    const fetchFinancialYears = async () => {
+        try {
+            const response = await financialYearAPI.getFinancialYears();
+            const years = (response?.data?.data?.financialYears || []).map(fy => fy.year);
+            setFinancialYears(years);
+        } catch (err) {
+            console.error('Error fetching financial years:', err);
+        }
+    };
+
+    // Only triggered on explicit search click — not on every keystroke
+    const handleSearch = () => {
+        const trimmed = inputFY.trim();
+        // Basic validation: must look like YYYY-YYYY
+        if (!/^\d{4}-\d{4}$/.test(trimmed)) {
+            alert('Please enter a valid financial year (e.g. 2025-2026)');
+            return;
+        }
+        setSelectedFinancialYear(trimmed);
+    };
+
+    // Allow pressing Enter in the input to also trigger search
+    const handleInputKeyDown = (e) => {
+        if (e.key === 'Enter') handleSearch();
+    };
 
     useEffect(() => {
         fetchDepartmentData();
@@ -572,13 +606,29 @@ export const DepartmentDetail = () => {
                         </div>
                     </div>
                     <div className="header-right">
-                        <div className="financial-year-selector">
-                            <Calendar size={16} />
-                            <select value={selectedFinancialYear} onChange={(e) => setSelectedFinancialYear(e.target.value)}>
-                                <option value={currentFY}>FY {currentFY}</option>
-                                <option value={previousFY}>FY {previousFY}</option>
-                                <option value={fyMinus2}>FY {fyMinus2}</option>
-                            </select>
+                        <div className="filter-group">
+                            <div className="flexible-year-input">
+                                <input
+                                    list="dept-fy-suggestions"
+                                    value={inputFY}
+                                    onChange={(e) => setInputFY(e.target.value)}
+                                    onKeyDown={handleInputKeyDown}
+                                    className="filter-select year-input"
+                                    placeholder="e.g. 2025-2026"
+                                />
+                                <datalist id="dept-fy-suggestions">
+                                    {financialYears.map(year => (
+                                        <option key={year} value={year} />
+                                    ))}
+                                </datalist>
+                                <button
+                                    className="fy-search-btn"
+                                    onClick={handleSearch}
+                                    title="Search for this financial year"
+                                >
+                                    <Search size={17} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

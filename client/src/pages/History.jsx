@@ -187,8 +187,8 @@ const History = () => {
                                                         P
                                                         <span className="tooltip">Approved by Principal</span>
                                                     </span>
-                                                    <span className={`separator ${['allocated'].includes(proposal?.status) ? 'done' : ''}`}></span>
-                                                    <span className={`step ${['allocated'].includes(proposal?.status) ? 'done' : ''}`} title="Allocated by Office">
+                                                    <span className={`separator ${['approved', 'allocated'].includes(proposal?.status) ? 'done' : ''}`}></span>
+                                                    <span className={`step ${['approved', 'allocated'].includes(proposal?.status) ? 'done' : ''}`} title="Allocated by Office">
                                                         O
                                                         <span className="tooltip">Allocated by Office</span>
                                                     </span>

@@ -229,14 +229,21 @@ const submitExpenditure = async (req, res) => {
     const month = eventDateObj.getMonth() + 1;
     const financialYear = month >= 4 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 
+    // Extract raw string IDs to avoid Object wrapper mismatches
+    const allocDeptId = departmentId._id ? departmentId._id.toString() : departmentId.toString();
+    const allocBHId = budgetHead._id ? budgetHead._id.toString() : budgetHead.toString();
+
     // Check if allocation exists
     const allocation = await Allocation.findOne({
-      department: departmentId,
-      budgetHead,
+      department: allocDeptId,
+      budgetHead: allocBHId,
       financialYear
     });
 
     if (!allocation) {
+      const allForHead = await Allocation.find({ budgetHead: allocBHId });
+      console.log('Failed allocation search:', { allocDeptId, allocBHId, financialYear, eventType });
+      console.log('Available allocations for this head:', allForHead.map(a => ({ dept: a.department, fy: a.financialYear })));
       return res.status(400).json({
         success: false,
         message: 'No budget has been allocated for this budget head'
@@ -256,8 +263,8 @@ const submitExpenditure = async (req, res) => {
     }
 
     const expenditure = await Expenditure.create([{
-      department: departmentId,
-      budgetHead,
+      department: allocDeptId,
+      budgetHead: allocBHId,
       eventName,
       eventType,
       eventDate: eventDateObj,
@@ -356,10 +363,14 @@ const approveExpenditure = async (req, res) => {
       });
     }
 
+    // Safely extract IDs
+    const allocDeptId = expenditure.department._id ? expenditure.department._id.toString() : expenditure.department.toString();
+    const allocBHId = expenditure.budgetHead._id ? expenditure.budgetHead._id.toString() : expenditure.budgetHead.toString();
+
     // Get allocation
     const allocation = await Allocation.findOne({
-      department: expenditure.department,
-      budgetHead: expenditure.budgetHead,
+      department: allocDeptId,
+      budgetHead: allocBHId,
       financialYear: expenditure.financialYear
     });
 
@@ -571,10 +582,14 @@ const finalizeExpenditure = async (req, res) => {
       });
     }
 
+    // Safely extract IDs
+    const allocDeptId = expenditure.department._id ? expenditure.department._id.toString() : expenditure.department.toString();
+    const allocBHId = expenditure.budgetHead._id ? expenditure.budgetHead._id.toString() : expenditure.budgetHead.toString();
+
     // Get allocation
     const allocation = await Allocation.findOne({
-      department: expenditure.department,
-      budgetHead: expenditure.budgetHead,
+      department: allocDeptId,
+      budgetHead: allocBHId,
       financialYear: expenditure.financialYear
     });
 
@@ -702,7 +717,9 @@ const verifyExpenditure = async (req, res) => {
     }
 
     if (req.user.role === 'hod') {
-      if (expenditure.department.toString() !== req.user.department.toString()) {
+      const expDeptId = expenditure.department._id ? expenditure.department._id.toString() : expenditure.department.toString();
+      const userDeptId = req.user.department._id ? req.user.department._id.toString() : req.user.department.toString();
+      if (expDeptId !== userDeptId) {
         return res.status(403).json({
           success: false,
           message: 'You can only verify expenditures from your department'

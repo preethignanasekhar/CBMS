@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+    financialYearAPI,
+    budgetProposalAPI,
     allocationAPI,
     departmentsAPI,
     budgetHeadsAPI,
     categoriesAPI,
-    budgetProposalAPI,
-    expenditureAPI,
-    reportAPI
+    reportAPI,
+    expenditureAPI
 } from '../services/api';
 import Tooltip from '../components/Tooltip/Tooltip';
 import PageHeader from '../components/Common/PageHeader';
@@ -18,8 +19,9 @@ import {
     Tag, AlertCircle, Save, AlignLeft, Hash, ArrowLeft, Eye, CheckCircle,
     XCircle, Clock, DollarSign, Send, Check, RefreshCcw, ShieldCheck,
     TrendingUp, TrendingDown, FileText, RotateCw, Download, ArrowUpRight, Search,
-    AlertTriangle, Sparkles
+    AlertTriangle, Sparkles, Calendar, RefreshCw
 } from 'lucide-react';
+import { getCurrentFinancialYear } from '../utils/dateUtils';
 import {
     BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, Legend, ResponsiveContainer
@@ -41,6 +43,7 @@ export const BudgetAllocations = () => {
         budgetHeadId: searchParams.get('budgetHead') || '',
         financialYear: searchParams.get('financialYear') || ''
     });
+    const [financialYears, setFinancialYears] = useState([]);
 
     useEffect(() => {
         fetchData();
@@ -68,6 +71,12 @@ export const BudgetAllocations = () => {
             setDepartments(departmentsResponse.data.data.departments);
             setBudgetHeads(budgetHeadsResponse.data.data.budgetHeads);
             setStats(statsResponse.data.data);
+
+            // Also fetch all available years for the flexible filter
+            const yearsRes = await financialYearAPI.getFinancialYears();
+            const years = yearsRes.data.data.financialYears || [];
+            setFinancialYears(Array.isArray(years) ? years.map(fy => fy.year) : []);
+
             setError(null);
         } catch (err) {
             setError('Failed to fetch data');
@@ -95,6 +104,15 @@ export const BudgetAllocations = () => {
                 console.error('Error deleting allocation:', err);
             }
         }
+    };
+
+    const handleDateToFY = (e) => {
+        const date = new Date(e.target.value);
+        if (isNaN(date.getTime())) return;
+        const month = date.getMonth();
+        const year = date.getFullYear();
+        const startYear = month >= 3 ? year : year - 1;
+        setFilters(prev => ({ ...prev, financialYear: `${startYear}-${startYear + 1}` }));
     };
 
     const getUtilizationPercentage = (allocated, spent) => {
@@ -200,17 +218,29 @@ export const BudgetAllocations = () => {
                     </select>
                 </div>
                 <div className="filter-group">
-                    <select
-                        name="financialYear"
-                        value={filters.financialYear}
-                        onChange={handleFilterChange}
-                        className="filter-select"
-                    >
-                        <option value="">All Financial Years</option>
-                        {(stats?.financialYears || []).map(year => (
-                            <option key={year} value={year}>{year}</option>
-                        ))}
-                    </select>
+                    <div className="flexible-year-input">
+                        <input
+                            list="fy-suggestions"
+                            name="financialYear"
+                            value={filters.financialYear}
+                            onChange={handleFilterChange}
+                            className="filter-select year-input"
+                            placeholder="Financial Year"
+                        />
+                        <datalist id="fy-suggestions">
+                            {financialYears.map(year => (
+                                <option key={year} value={year} />
+                            ))}
+                        </datalist>
+                        <div className="date-picker-helper" title="Choose date to set Year">
+                            <Calendar size={18} />
+                            <input
+                                type="date"
+                                onChange={handleDateToFY}
+                                className="hidden-date-picker"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1351,14 +1381,34 @@ export const BudgetProposalForm = () => {
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Financial Year <span className="required">*</span></label>
-                                    <input
-                                        type="text"
-                                        name="financialYear"
-                                        value={formData.financialYear}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g., 2025-2026"
-                                        required
-                                    />
+                                    <div className="flexible-year-input" style={{ background: 'white', border: '1px solid #ddd', borderRadius: '4px', padding: '0 8px' }}>
+                                        <input
+                                            type="text"
+                                            name="financialYear"
+                                            list="fy-suggestions"
+                                            value={formData.financialYear}
+                                            onChange={handleInputChange}
+                                            placeholder="e.g., 2025-2026"
+                                            required
+                                            style={{ border: 'none', width: '100%', padding: '10px 0' }}
+                                        />
+                                        <div className="date-picker-helper" style={{ cursor: 'pointer', color: 'var(--primary)' }}>
+                                            <Calendar size={18} />
+                                            <input
+                                                type="date"
+                                                onChange={(e) => {
+                                                    const date = new Date(e.target.value);
+                                                    if (isNaN(date.getTime())) return;
+                                                    const month = date.getMonth();
+                                                    const year = date.getFullYear();
+                                                    const startYear = month >= 3 ? year : year - 1;
+                                                    setFormData(prev => ({ ...prev, financialYear: `${startYear}-${startYear + 1}` }));
+                                                }}
+                                                className="hidden-date-picker"
+                                                style={{ position: 'absolute', opacity: 0, width: '20px', marginLeft: '-20px' }}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="form-group">
@@ -2005,7 +2055,7 @@ export const BudgetProposals = () => {
                                 <th>Department</th>
                                 <th>Financial Year</th>
                                 <th>Total Proposed</th>
-                                <th>Items</th>
+                                <th>Budget Heads</th>
                                 <th>Status</th>
                                 <th>Submitted Date</th>
                                 <th>Actions</th>
@@ -2027,7 +2077,9 @@ export const BudgetProposals = () => {
                                         </span>
                                     </td>
                                     <td>
-                                        <span className="item-count">{proposal.proposalItems.length} items</span>
+                                        <div className="budget-heads-list text-sm">
+                                            {proposal.proposalItems?.map(item => item.budgetHead?.name).join(', ') || 'N/A'}
+                                        </div>
                                     </td>
                                     <td>
                                         <div className="status-cell">
@@ -2236,7 +2288,8 @@ export const BudgetUtilizationDashboard = () => {
 
     const getDepartmentData = () => {
         if (!dashboard) return [];
-        return dashboard.departmentWiseUtilization.sort((a, b) => b.totalAllocated - a.totalAllocated).slice(0, 10);
+        // Sort by total allocated and take 11 departments as requested
+        return dashboard.departmentWiseUtilization.sort((a, b) => b.totalAllocated - a.totalAllocated).slice(0, 11);
     };
 
     const getStatusColor = (percentage) => {
@@ -2335,61 +2388,69 @@ export const BudgetUtilizationDashboard = () => {
                     )}
 
                     {/* Charts Section */}
-                    <div className="charts-section">
-                        {/* Utilization Range Distribution */}
-                        <div className="chart-container">
-                            <h3>Distribution by Utilization Range</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={getUtilizationData()}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="range" />
-                                    <YAxis />
-                                    <RechartsTooltip />
-                                    <Legend />
-                                    <Bar dataKey="count" fill="#8884d8" name="Number of Allocations" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Top Departments by Allocation */}
-                        <div className="chart-container">
-                            <h3>Top 10 Departments by Budget Allocation</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={getDepartmentData()} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis type="number" />
-                                    <YAxis dataKey="code" type="category" width={80} />
-                                    <RechartsTooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
-                                    <Bar dataKey="totalAllocated" fill="#8884d8" name="Allocated" />
-                                    <Bar dataKey="totalSpent" fill="#82ca9d" name="Spent" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Utilization Pie Chart */}
-                        <div className="chart-container">
-                            <h3>Allocations by Utilization Status</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={UTILIZATION_RANGES.map(range => ({
-                                            name: `${range}%`,
-                                            value: dashboard.utilizationRanges[range].count
-                                        }))}
-                                        cx="50%"
-                                        cy="50%"
-                                        labelLine={false}
-                                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                                        outerRadius={80}
-                                        fill="#8884d8"
-                                        dataKey="value"
+                    <div className="charts-section single-chart">
+                        <div className="chart-container full-width">
+                            <h3 className="text-center mb-4">Departmental Budget: Requested vs Spent Amount</h3>
+                            <ResponsiveContainer width="100%" height={500}>
+                                <BarChart data={getDepartmentData()} margin={{ top: 20, right: 60, left: 80, bottom: 60 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                    <XAxis
+                                        dataKey="code"
+                                        interval={0}
+                                        angle={-45}
+                                        textAnchor="end"
+                                        height={60}
+                                        stroke="#94a3b8"
+                                        tick={{ fill: '#64748b', fontSize: 12, dy: 5 }}
+                                    />
+                                    <YAxis
+                                        stroke="#94a3b8"
+                                        tick={{ fill: '#64748b', fontSize: 12 }}
+                                        tickFormatter={(value) => `₹${(value / 100000).toFixed(1)}L`}
+                                    />
+                                    <RechartsTooltip
+                                        formatter={(value) => `₹${value.toLocaleString('en-IN')}`}
+                                        contentStyle={{
+                                            borderRadius: '12px',
+                                            border: 'none',
+                                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                                            padding: '12px',
+                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                            backdropFilter: 'blur(4px)'
+                                        }}
+                                    />
+                                    <Legend
+                                        verticalAlign="top"
+                                        align="center"
+                                        height={80}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '10px', paddingBottom: '30px' }}
+                                    />
+                                    <Bar dataKey="totalAllocated" fill="#6366f1" name="Requested Amount" radius={[6, 6, 0, 0]} barSize={35} />
+                                    <Bar dataKey="totalSpent" fill="#10b981" name="Spent Amount" radius={[6, 6, 0, 0]} barSize={35} />
+                                    {/* Custom labels for axes to prevent overlapping */}
+                                    <text
+                                        x={30}
+                                        y={250}
+                                        transform="rotate(-90 30 250)"
+                                        textAnchor="middle"
+                                        fill="#475569"
+                                        fontWeight="600"
+                                        fontSize="14"
                                     >
-                                        {UTILIZATION_RANGES.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index]} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip />
-                                </PieChart>
+                                        Amount (₹)
+                                    </text>
+                                    <text
+                                        x="50%"
+                                        y={495}
+                                        textAnchor="middle"
+                                        fill="#475569"
+                                        fontWeight="600"
+                                        fontSize="14"
+                                    >
+                                        Departments
+                                    </text>
+                                </BarChart>
                             </ResponsiveContainer>
                         </div>
                     </div>

@@ -453,13 +453,18 @@ export const SubmitExpenditure = () => {
 
     const fetchAllocations = async () => {
         try {
-            const currentYear = getCurrentFinancialYear();
+            const dateStr = formData.eventDate || new Date().toISOString().split('T')[0];
+            const dateObj = new Date(dateStr);
+            const year = dateObj.getFullYear();
+            const month = dateObj.getMonth() + 1;
+            const fy = month >= 4 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+
             const response = await allocationAPI.getAllocations({
-                financialYear: currentYear,
+                financialYear: fy,
                 department: formData.departmentId,
                 limit: 1000
             });
-            setAllocations(response.data.data.allocations);
+            setAllocations(response.data.data.allocations || []);
         } catch (error) {
             console.error('Error fetching allocations:', error);
         }
@@ -473,6 +478,10 @@ export const SubmitExpenditure = () => {
     };
 
     useEffect(() => {
+        fetchAllocations();
+    }, [formData.eventDate, formData.departmentId]);
+
+    useEffect(() => {
         if (formData.budgetHeadId) {
             // Robust matching: handle both string IDs and object IDs from population
             const allocation = allocations.find(alloc => {
@@ -483,7 +492,6 @@ export const SubmitExpenditure = () => {
             if (allocation) {
                 setRemainingBudget(allocation.remainingAmount ?? (allocation.allocatedAmount - allocation.spentAmount));
             } else {
-                // IMPORTANT: Reset to 0 if no allocation found for this head
                 setRemainingBudget(0);
             }
         } else {
@@ -762,7 +770,12 @@ export const SubmitExpenditure = () => {
                                                 {formData.budgetHeadId && (
                                                     <span className={`form-help ${remainingBudget === 0 ? 'text-danger' : 'text-success'}`} style={{ fontWeight: remainingBudget === 0 ? 'bold' : 'normal' }}>
                                                         {remainingBudget === 0
-                                                            ? `No allocation found for this head in ${getCurrentFinancialYear()}`
+                                                            ? `No allocation found for this head in ${(() => {
+                                                                const d = formData.eventDate ? new Date(formData.eventDate) : new Date();
+                                                                const y = d.getFullYear();
+                                                                const m = d.getMonth() + 1;
+                                                                return m >= 4 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+                                                            })()}`
                                                             : `Available Balance: ${formatCurrency(remainingBudget)}`}
                                                     </span>
                                                 )}

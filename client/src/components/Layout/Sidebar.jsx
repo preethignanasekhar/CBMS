@@ -59,14 +59,13 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
       case 'office':
         return [
           ...baseItems,
-          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
-          { path: '/categories', label: 'Categories', icon: <Layers size={20} /> },
-
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
+          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
+          { path: '/consolidated-view', label: 'Consolidated', icon: <TrendingUp size={20} /> },
           { path: '/budget-utilization-dashboard', label: 'Utilization Dashboard', icon: <Gauge size={20} /> },
+          { path: '/categories', label: 'Category', icon: <Layers size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
-          { path: '/consolidated-view', label: 'Consolidated View', icon: <TrendingUp size={20} /> },
-          { path: '/year-comparison', label: 'Year Comparison', icon: <LineChart size={20} /> },
+          { path: '/year-comparison', label: 'Year-over-Year', icon: <LineChart size={20} /> },
           historyItem
         ];
       case 'department':

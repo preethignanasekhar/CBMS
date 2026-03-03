@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { allocationAPI, expenditureAPI, departmentsAPI, reportAPI } from '../services/api';
+import { allocationAPI, expenditureAPI, departmentsAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
-import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight } from 'lucide-react';
+import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight, Calendar } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import './ConsolidatedDashboard.scss';
 
@@ -31,8 +31,33 @@ const ConsolidatedDashboard = () => {
   const fyMinus2 = getFYMinus2();
 
   const [selectedFinancialYear, setSelectedFinancialYear] = useState(currentFY);
+  const [financialYears, setFinancialYears] = useState([]);
 
   const { socket } = useSocket();
+
+  useEffect(() => {
+    fetchFinancialYears();
+  }, []);
+
+  const fetchFinancialYears = async () => {
+    try {
+      const response = await financialYearAPI.getFinancialYears();
+      const yearsData = response?.data?.data?.financialYears || [];
+      const years = Array.isArray(yearsData) ? yearsData.map(fy => fy.year) : [];
+      setFinancialYears(years);
+    } catch (err) {
+      console.error('Error fetching financial years:', err);
+    }
+  };
+
+  const handleDateToFY = (e) => {
+    const date = new Date(e.target.value);
+    if (isNaN(date.getTime())) return;
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const startYear = month >= 3 ? year : year - 1;
+    setSelectedFinancialYear(`${startYear}-${startYear + 1}`);
+  };
 
   useEffect(() => {
     fetchData();
@@ -163,8 +188,8 @@ const ConsolidatedDashboard = () => {
 
   return (
     <div className="page-container consolidated-dashboard-container">
-      <PageHeader 
-        title="Consolidated Budget Dashboard" 
+      <PageHeader
+        title="Consolidated Budget Dashboard"
         subtitle="Complete overview of budget allocations and expenditures across all departments"
       />
 
@@ -189,18 +214,39 @@ const ConsolidatedDashboard = () => {
             ))}
           </select>
         </div>
-        <div className="filter-group">
+        <div className="filter-group year-filter-group">
           <label htmlFor="financialYear">Financial Year</label>
-          <select
-            id="financialYear"
-            value={selectedFinancialYear}
-            onChange={(e) => setSelectedFinancialYear(e.target.value)}
-            className="filter-select"
-          >
-            <option value={currentFY}>{currentFY}</option>
-            <option value={previousFY}>{previousFY}</option>
-            <option value={fyMinus2}>{fyMinus2}</option>
-          </select>
+          <div className="flexible-year-input">
+            <input
+              list="fy-suggestions"
+              id="financialYear"
+              value={selectedFinancialYear}
+              onChange={(e) => setSelectedFinancialYear(e.target.value)}
+              className="filter-input"
+              placeholder="e.g. 2025-2026"
+            />
+            <datalist id="fy-suggestions">
+              {financialYears.length > 0 ? (
+                financialYears.map(year => (
+                  <option key={year} value={year} />
+                ))
+              ) : (
+                <>
+                  <option value={currentFY} />
+                  <option value={previousFY} />
+                  <option value={fyMinus2} />
+                </>
+              )}
+            </datalist>
+            <div className="date-picker-helper" title="Choose date to set Year">
+              <Calendar size={18} />
+              <input
+                type="date"
+                onChange={handleDateToFY}
+                className="hidden-date-picker"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -245,109 +291,8 @@ const ConsolidatedDashboard = () => {
         </div>
       )}
 
-      {yearComparison && yearComparison.summary ? (
-        <div className="year-comparison-section">
-          <h2>Year-over-Year Comparison</h2>
-          <div className="comparison-cards">
-            <div className="comparison-card">
-              <div className="comparison-header">
-                <h3>Total Budget Allocated</h3>
-                <div className="trend-icon">
-                  {yearComparison.summary.changes.allocatedChange >= 0 ? (
-                    <TrendingUp size={20} className="trend-up" />
-                  ) : (
-                    <TrendingDown size={20} className="trend-down" />
-                  )}
-                </div>
-              </div>
-              <div className="comparison-values">
-                <div className="value-row">
-                  <span className="label">Previous Year ({yearComparison.previousYear}):</span>
-                  <span className="value">{formatCurrency(yearComparison.summary.previous.totalAllocated)}</span>
-                </div>
-                <div className="value-row">
-                  <span className="label">Current Year ({yearComparison.currentYear}):</span>
-                  <span className="value">{formatCurrency(yearComparison.summary.current.totalAllocated)}</span>
-                </div>
-                <div className="change-indicator">
-                  <span className={yearComparison.summary.changes.allocatedChange >= 0 ? 'positive' : 'negative'}>
-                    {yearComparison.summary.changes.allocatedChange >= 0 ? '+' : ''}
-                    {yearComparison.summary.changes.allocatedChange.toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            <div className="comparison-card">
-              <div className="comparison-header">
-                <h3>Total Expenses Incurred</h3>
-                <div className="trend-icon">
-                  {yearComparison.summary.changes.spentChange >= 0 ? (
-                    <TrendingUp size={20} className="trend-up" />
-                  ) : (
-                    <TrendingDown size={20} className="trend-down" />
-                  )}
-                </div>
-              </div>
-              <div className="comparison-values">
-                <div className="value-row">
-                  <span className="label">Previous Year ({yearComparison.previousYear}):</span>
-                  <span className="value">{formatCurrency(yearComparison.summary.previous.totalSpent)}</span>
-                </div>
-                <div className="value-row">
-                  <span className="label">Current Year ({yearComparison.currentYear}):</span>
-                  <span className="value">{formatCurrency(yearComparison.summary.current.totalSpent)}</span>
-                </div>
-                <div className="change-indicator">
-                  <span className={yearComparison.summary.changes.spentChange >= 0 ? 'warning' : 'positive'}>
-                    {yearComparison.summary.changes.spentChange >= 0 ? '+' : ''}
-                    {yearComparison.summary.changes.spentChange.toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            <div className="comparison-card">
-              <div className="comparison-header">
-                <h3>Fund Utilization Rate</h3>
-                <div className="trend-icon">
-                  {yearComparison.summary.changes.utilizationChange >= 0 ? (
-                    <TrendingUp size={20} className="trend-up" />
-                  ) : (
-                    <TrendingDown size={20} className="trend-down" />
-                  )}
-                </div>
-              </div>
-              <div className="comparison-values">
-                <div className="value-row">
-                  <span className="label">Previous Year ({yearComparison.previousYear}):</span>
-                  <span className="value">{yearComparison.summary.previous.utilization.toFixed(2)}%</span>
-                </div>
-                <div className="value-row">
-                  <span className="label">Current Year ({yearComparison.currentYear}):</span>
-                  <span className="value">{yearComparison.summary.current.utilization.toFixed(2)}%</span>
-                </div>
-                <div className="change-indicator">
-                  <span className={yearComparison.summary.changes.utilizationChange >= 0 ? 'neutral' : 'neutral'}>
-                    {yearComparison.summary.changes.utilizationChange >= 0 ? '+' : ''}
-                    {yearComparison.summary.changes.utilizationChange.toFixed(2)}% points
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="year-comparison-section">
-          <h2>Year-over-Year Comparison</h2>
-          <div className="no-data-message-section">
-            <AlertCircle size={64} />
-            <h3>No Previous Year Data Available</h3>
-            <p>Year-over-year comparison requires allocation and expenditure data for the previous financial year.</p>
-            <p className="no-data-hint">Please ensure data exists for both 2023-2024 and 2024-2025 financial years.</p>
-          </div>
-        </div>
-      )}
 
       <div className="dashboard-content">
         <div className="department-breakdown">
