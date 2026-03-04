@@ -119,11 +119,20 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState(null);
     const [selectedItems, setSelectedItems] = useState([]);
+    const [chatNotes, setChatNotes] = useState([]);
 
     const chatEndRef = useRef(null);
 
     const scrollToBottom = () => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (chatEndRef.current) {
+            const parent = chatEndRef.current.parentElement;
+            if (parent) {
+                parent.scrollTo({
+                    top: parent.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        }
     };
 
     useEffect(() => {
@@ -156,33 +165,14 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
             setLoading(true);
             setTimeout(() => {
                 setLoading(false);
+                const customNoteName = userDisplayMessage;
 
-                // Make a mock custom item
-                const customItemName = userMessage.trim();
-                const newItem = {
-                    name: customItemName,
-                    quantity: 1,
-                    estimatedCost: 1000, // mock default cost
-                    priority: "Optional",
-                    category: "Custom Addition"
-                };
-
-                // Update analysis state with the new item so existing bubbles can pick it up
-                setAnalysis(prev => {
-                    if (!prev) return prev;
-                    const updated = { ...prev };
-                    if (updated.items) {
-                        updated.items = [...updated.items, newItem];
-                        updated.estimatedTotal += newItem.estimatedCost;
-                    }
-                    return updated;
-                });
-
-                setSelectedItems(prev => [...new Set([...prev, customItemName])]);
+                // Add to notes instead of creating a fake item
+                setChatNotes(prev => prev.includes(customNoteName) ? prev : [...prev, customNoteName]);
 
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
-                    text: `I've dynamically added "${customItemName}" to your budget requirements. You can see it in the preview card above. Anything else?`,
+                    text: `I've added "${customNoteName}" to your Event Notes below. Anything else?`,
                     sender: 'ai',
                     type: 'text'
                 }]);
@@ -196,6 +186,19 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
         const processedValue = currentNode.process(customValue !== null ? customValue : rawMessage);
         const updatedData = { ...eventData, [currentKey]: processedValue };
         setEventData(updatedData);
+
+        // Add affirmative answers to notes automatically
+        let noteText = '';
+        if (currentKey === 'softwareRequired' && processedValue === true) noteText = 'Software Installation Required';
+        if (currentKey === 'resourcePerson' && processedValue === true) noteText = 'Resource Person / Guest Required';
+        if (currentKey === 'guestAccommodation' && processedValue === true) noteText = 'Guest Accommodation Required';
+        if (currentKey === 'guestTravel' && processedValue === true) noteText = 'Guest Travel Allowance Required';
+        if (currentKey === 'certification' && processedValue === true) noteText = 'Certificates to be printed';
+        if (currentKey === 'isInternal' && processedValue === false) noteText = 'External participants joining';
+
+        if (noteText) {
+            setChatNotes(prev => prev.includes(noteText) ? prev : [...prev, noteText]);
+        }
 
         const nextKey = currentNode.next(processedValue, updatedData);
 
@@ -285,7 +288,8 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                 eventName: eventData.eventName,
                 selectedItems,
                 budgetSuggestions: analysis.budgetSuggestions,
-                analysisDetails: analysis.analysis
+                analysisDetails: analysis.analysis,
+                chatNotes
             });
         }
     };
@@ -378,6 +382,7 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                     });
                     setAnalysis(null);
                     setSelectedItems([]);
+                    setChatNotes([]);
                     setMessages([{ id: '1', text: QUESTION_NODES['eventName'].text, sender: 'ai', type: 'text' }]);
                 }}>
                     <RefreshCw size={14} />
@@ -439,6 +444,19 @@ const AIRequirementGenerator = ({ onRequirementsGenerated }) => {
                     <Send size={18} />
                 </button>
             </form>
+
+            {chatNotes.length > 0 && analysis && (
+                <div className="ai-chat-notes-panel" style={{ padding: '0.75rem 1rem', background: '#f8fafc', borderTop: '1px solid var(--border-light)', fontSize: '0.85rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Flag size={14} style={{ color: 'var(--primary)' }} /> Event Notes
+                    </div>
+                    <ul style={{ paddingLeft: '1.5rem', color: 'var(--text-secondary)', listStyleType: 'disc', margin: 0 }}>
+                        {chatNotes.map((note, idx) => (
+                            <li key={idx} style={{ paddingBottom: '2px' }}>{note}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 };

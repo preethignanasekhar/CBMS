@@ -2250,10 +2250,7 @@
 }
 
 .budget-proposal-layout {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 2rem;
-  align-items: flex-start;
+  display: block;
   margin-top: 1.5rem;
 }
 
@@ -2316,6 +2313,19 @@
     position: static;
     margin-top: 2rem;
   }
+}
+
+/* Hide Number spin buttons for Proposed Amount */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  /* Firefox */
 }
 
 @keyframes fadeIn {

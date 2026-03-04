@@ -59,6 +59,18 @@ const getExpenditureReport = async (req, res) => {
     const summary = {
       totalExpenditures: expenditures.length,
       totalAmount: expenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+      approvedAmount: expenditures
+        .filter(exp => ['approved', 'finalized'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+      pendingAmount: expenditures
+        .filter(exp => ['pending', 'verified'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+      rejectedAmount: expenditures
+        .filter(exp => exp.status === 'rejected')
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+      averageAmount: expenditures.length > 0
+        ? expenditures.reduce((sum, exp) => sum + (exp.totalAmount || 0), 0) / expenditures.length
+        : 0,
       byStatus: {},
       byDepartment: {},
       byBudgetHead: {},
@@ -321,14 +333,29 @@ const getDashboardReport = async (req, res) => {
         .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
-      // 4. Pending Amount (events under initial submission - NOT yet verified)
+      // 4. Spent Amount (Alias for totalUtilized for frontend compatibility)
+      totalSpent: expenditures
+        .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // 5. Approved Amount (Only Approved or Finalized)
+      totalApproved: expenditures
+        .filter(exp => ['approved', 'finalized'].includes(exp.status))
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // 6. Pending Amount (events under initial submission - NOT yet verified)
       totalPending: expenditures
         .filter(exp => exp.status === 'pending')
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
-      // Legacy field for compatibility if needed elsewhere
-      remainingBalance: (allocations.reduce((sum, alloc) => sum + alloc.allocatedAmount, 0)) -
-        (expenditures.filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status)).reduce((sum, exp) => sum + (exp.totalAmount || 0), 0)),
+      // 7. Verified Amount (Verified but not yet approved)
+      totalVerified: expenditures
+        .filter(exp => exp.status === 'verified')
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // Legacy field for compatibility
+      remainingBalance: 0,
+      totalRemaining: 0,
 
       // Support for status breakdown count
       statusBreakdown: {
@@ -364,7 +391,8 @@ const getDashboardReport = async (req, res) => {
       }
     };
 
-    consolidated.remainingBalance = consolidated.totalAllocated - consolidated.totalUtilized;
+    consolidated.totalRemaining = consolidated.totalAllocated - consolidated.totalUtilized;
+    consolidated.remainingBalance = consolidated.totalRemaining;
 
     // Calculate daily metrics (for today)
     const today = new Date();
@@ -868,8 +896,8 @@ const generateAllocationCSV = (allocations) => {
       alloc.spentAmount,
       alloc.remainingAmount,
       utilization,
-      alloc.createdBy.name,
-      alloc.createdAt.toISOString()
+      alloc.createdBy?.name || 'N/A',
+      alloc.createdAt ? new Date(alloc.createdAt).toISOString() : 'N/A'
     ];
   });
 
@@ -888,11 +916,11 @@ const generateAuditCSV = (auditLogs) => {
   ];
 
   const rows = auditLogs.map(log => [
-    log.timestamp.toISOString(),
+    log.createdAt ? new Date(log.createdAt).toISOString() : 'N/A',
     log.eventType,
-    log.actorId ? log.actorId.name : 'System',
-    log.actorId ? log.actorId.role : 'System',
-    log.details
+    log.actor ? log.actor.name : 'System',
+    log.actor ? log.actor.role : 'System',
+    typeof log.details === 'object' ? JSON.stringify(log.details) : log.details
   ]);
 
   return [headers, ...rows].map(row =>

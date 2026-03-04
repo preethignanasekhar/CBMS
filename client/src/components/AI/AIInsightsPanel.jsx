@@ -124,11 +124,43 @@ const AIInsightsPanel = ({ financialYear, compact = false }) => {
 
             {expanded && (
                 <div className="panel-content">
-                    {/* Overall Status */}
+                    {/* Overall Status & Briefing Grid */}
                     <div className="insight-section status-section">
                         <p className="status-text">{insights.overallStatus}</p>
-                        <p className="explanation-text">{insights.utilizationExplanation}</p>
+                        <div className="briefing-grid">
+                            {insights.briefingItems?.map((item, idx) => (
+                                <div key={idx} className="briefing-item">
+                                    {item.icon === 'alert' && <AlertTriangle size={16} className="text-red-500" />}
+                                    {item.icon === 'calendar' && <Calendar size={16} className="text-blue-500" />}
+                                    {item.icon === 'trending' && <TrendingUp size={16} className="text-orange-500" />}
+                                    <span>{item.text}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="explanation-text" style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
+                            {insights.utilizationExplanation}
+                        </p>
                     </div>
+
+                    {/* Benchmarking Section */}
+                    {insights.benchmarking && (
+                        <div className="insight-section benchmarking-section">
+                            <h4>Efficiency Benchmarking (Top Performing)</h4>
+                            <div className="bench-list">
+                                {insights.benchmarking.map((dept, idx) => (
+                                    <div key={idx} className="bench-item">
+                                        <div className="bench-info">
+                                            <span className="dept-code">{dept.code}</span>
+                                            <span className="efficiency">₹{Math.round(dept.efficiencyRatio).toLocaleString()}/event</span>
+                                        </div>
+                                        <div className="bench-progress">
+                                            <div className="bar" style={{ width: `${dept.utilization}%` }}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Risk Summary */}
                     <div className="insight-section risk-section">

@@ -417,19 +417,16 @@ a:hover {
   }
 }
 
-.metric-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-}
-
 .metric-content h3 {
   font-size: 1.75rem;
   font-weight: 800;
   color: var(--text-primary);
   margin: 0;
+}
+
+.metric-content .tooltip-container {
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .metric-content p {

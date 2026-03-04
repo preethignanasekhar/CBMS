@@ -29,11 +29,10 @@ import {
     TrendingDown,
     Calendar,
     AlertCircle,
+    X,
     FileText,
     Building,
-    Users,
     Save,
-    X,
     Pencil,
     Trash2,
     Users as UsersIcon,
@@ -235,8 +234,18 @@ export const DepartmentDashboard = () => {
             />
 
             {error && (
-                <div className="error-message">
-                    {error}
+                <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <AlertCircle size={20} />
+                        <span>{error}</span>
+                    </div>
+                    <button
+                        className="alert-dismiss"
+                        onClick={() => setError(null)}
+                        title="Dismiss"
+                    >
+                        <X size={18} />
+                    </button>
                 </div>
             )}
 
@@ -247,7 +256,7 @@ export const DepartmentDashboard = () => {
                             <IndianRupee size={24} />
                         </div>
                         <div className="stat-info">
-                            <div className="stat-number">{formatCurrency(stats.summary.totalAllocated)}</div>
+                            <div className="stat-number">{formatCurrency(stats.summary?.totalAllocated || 0)}</div>
                             <div className="stat-label">Total Allocated</div>
                         </div>
                     </div>
@@ -256,7 +265,7 @@ export const DepartmentDashboard = () => {
                             <CreditCard size={24} />
                         </div>
                         <div className="stat-info">
-                            <div className="stat-number">{formatCurrency(stats.summary.totalSpent)}</div>
+                            <div className="stat-number">{formatCurrency(stats.summary?.totalSpent || 0)}</div>
                             <div className="stat-label">Total Spent</div>
                         </div>
                     </div>
@@ -265,7 +274,7 @@ export const DepartmentDashboard = () => {
                             <Wallet size={24} />
                         </div>
                         <div className="stat-info">
-                            <div className="stat-number">{formatCurrency(stats.summary.totalRemaining)}</div>
+                            <div className="stat-number">{formatCurrency(stats.summary?.totalRemaining || 0)}</div>
                             <div className="stat-label">Remaining Budget</div>
                         </div>
                     </div>
@@ -492,69 +501,64 @@ export const DepartmentDetail = () => {
         }));
 
         return {
+            color: ['#667eea', '#28a745'],
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
                 formatter: (params) => {
                     return params.map(param =>
-                        `${param.seriesName}: ${param.seriesName.includes('Utilization') ? param.value.toFixed(2) + '%' : formatCurrency(param.value)}`
+                        `${param.seriesName}: ${formatCurrency(param.value)}`
                     ).join('<br/>');
                 }
             },
             legend: {
-                data: ['Allocated', 'Spent', 'Utilization %']
+                data: ['Allocated', 'Spent'],
+                selected: { 'Allocated': true, 'Spent': true },
+                top: 0
             },
             grid: {
                 left: '3%',
                 right: '4%',
-                bottom: '3%',
+                bottom: '15%',
                 containLabel: true
             },
             xAxis: {
                 type: 'category',
-                data: data.map(d => d.name)
+                data: data.map(d => d.name),
+                axisLabel: {
+                    interval: 0,
+                    rotate: 25,
+                    width: 120,
+                    overflow: 'truncate'
+                }
             },
-            yAxis: [
-                {
-                    type: 'value',
-                    name: 'Amount (₹)',
-                    axisLabel: {
-                        formatter: (value) => {
-                            if (value === 0) return '₹0';
-                            const kValue = value / 1000;
-                            return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
-                        }
-                    }
-                },
-                {
-                    type: 'value',
-                    name: 'Utilization (%)',
-                    max: 100,
-                    axisLabel: {
-                        formatter: '{value}%'
+            yAxis: {
+                type: 'value',
+                name: 'Amount (₹)',
+                axisLabel: {
+                    formatter: (value) => {
+                        if (value === 0) return '₹0';
+                        const kValue = value / 1000;
+                        return `₹${kValue.toFixed(kValue < 10 ? 1 : 0).replace(/\.0$/, '')}K`;
                     }
                 }
-            ],
+            },
             series: [
                 {
                     name: 'Allocated',
                     type: 'bar',
+                    barMaxWidth: 50,
+                    barMinHeight: 4,
                     data: data.map(d => d.allocated),
-                    itemStyle: { color: '#667eea' }
+                    itemStyle: { color: '#667eea', borderRadius: [4, 4, 0, 0] }
                 },
                 {
                     name: 'Spent',
                     type: 'bar',
+                    barMaxWidth: 50,
+                    barMinHeight: 4,
                     data: data.map(d => d.spent),
-                    itemStyle: { color: '#28a745' }
-                },
-                {
-                    name: 'Utilization %',
-                    type: 'line',
-                    yAxisIndex: 1,
-                    data: data.map(d => d.utilization),
-                    itemStyle: { color: '#ffc107' },
-                    lineStyle: { width: 3 }
+                    itemStyle: { color: '#28a745', borderRadius: [4, 4, 0, 0] }
                 }
             ]
         };
@@ -850,7 +854,6 @@ export const DepartmentDetail = () => {
                                 <th>Date</th>
                                 <th>Budget Head</th>
                                 <th>Amount</th>
-                                <th>Purpose</th>
                                 <th>Submitted By</th>
                                 <th>Status</th>
                             </tr>
@@ -859,12 +862,11 @@ export const DepartmentDetail = () => {
                             {departmentData.expenditures.length > 0 ? (
                                 departmentData.expenditures.map((exp) => (
                                     <tr key={exp._id}>
-                                        <td><strong>{exp.billNumber}</strong></td>
-                                        <td>{formatDate(exp.billDate)}</td>
-                                        <td>{exp.budgetHead.name}</td>
-                                        <td>{formatCurrency(exp.billAmount)}</td>
-                                        <td className="purpose-cell">{exp.purpose}</td>
-                                        <td>{exp.submittedBy.name}</td>
+                                        <td><strong>{exp.expenseItems && exp.expenseItems.length > 0 ? exp.expenseItems[0].billNumber : '-'}</strong></td>
+                                        <td>{formatDate(exp.eventDate || exp.createdAt)}</td>
+                                        <td>{exp.budgetHead?.name || 'Unknown'}</td>
+                                        <td>{formatCurrency(exp.totalAmount || 0)}</td>
+                                        <td>{exp.submittedBy?.name || 'Unknown'}</td>
                                         <td>
                                             <span className={`status-badge ${getStatusBadgeClass(exp.status)}`}>
                                                 {exp.status}
@@ -890,19 +892,19 @@ export const DepartmentDetail = () => {
                 <h2>Expenditure Status Summary</h2>
                 <div className="status-grid">
                     <div className="status-card pending">
-                        <h3>{departmentData.statusBreakdown.pending}</h3>
+                        <h3>{departmentData.expenditures.filter(e => e.status === 'pending').length}</h3>
                         <p>Pending</p>
                     </div>
                     <div className="status-card verified">
-                        <h3>{departmentData.statusBreakdown.verified}</h3>
+                        <h3>{departmentData.expenditures.filter(e => e.status === 'verified').length}</h3>
                         <p>Verified</p>
                     </div>
                     <div className="status-card approved">
-                        <h3>{departmentData.statusBreakdown.approved}</h3>
+                        <h3>{departmentData.expenditures.filter(e => e.status === 'approved' || e.status === 'finalized').length}</h3>
                         <p>Approved</p>
                     </div>
                     <div className="status-card rejected">
-                        <h3>{departmentData.statusBreakdown.rejected}</h3>
+                        <h3>{departmentData.expenditures.filter(e => e.status === 'rejected').length}</h3>
                         <p>Rejected</p>
                     </div>
                 </div>

@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reportAPI, departmentsAPI, budgetHeadsAPI, usersAPI, financialYearAPI } from '../services/api';
-import { Receipt, IndianRupee, PieChart, ClipboardList, Download, FileSpreadsheet, FileText, Calendar } from 'lucide-react';
+import { Receipt, IndianRupee, PieChart, Download, FileText, Calendar, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import PageHeader from '../components/Common/PageHeader';
 import './Reports.scss';
 
@@ -13,7 +11,6 @@ const Reports = () => {
   const [reportData, setReportData] = useState(null);
   const [reportType, setReportType] = useState('expenditures');
   const [filters, setFilters] = useState({
-    format: 'pdf',
     startDate: '',
     endDate: '',
     departmentId: '',
@@ -80,7 +77,15 @@ const Reports = () => {
       setLoading(true);
       setError(null);
 
-      const params = { ...filters };
+      const params = {};
+      if (filters.startDate) params.startDate = filters.startDate;
+      if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.status) params.status = filters.status;
+      if (filters.departmentId) params.department = filters.departmentId;
+      if (filters.budgetHeadId) params.budgetHead = filters.budgetHeadId;
+      if (filters.submittedBy) params.submittedBy = filters.submittedBy;
+      if (filters.financialYear) params.financialYear = filters.financialYear;
+      if (filters.includeComparison) params.includeComparison = filters.includeComparison;
 
       let response;
       switch (reportType) {
@@ -100,232 +105,104 @@ const Reports = () => {
           throw new Error('Invalid report type');
       }
 
-      if (filters.format === 'csv') {
-        // Handle CSV download
-        const blob = new Blob([response.data], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${reportType}-report.csv`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } else if (filters.format === 'excel') {
-        handleExcelExport(response.data.data);
-      } else if (filters.format === 'pdf') {
-        handlePDFExport(response.data.data);
-      } else {
-        setReportData(response.data.data);
-      }
+      // Always download as CSV
+      downloadAsCSV(response.data.data);
     } catch (err) {
-      setError('Failed to generate report');
-      console.error('Error generating report:', err);
+      const serverMsg = err?.response?.data?.message || err?.message || 'Failed to generate report';
+      setError(serverMsg);
+      console.error('Error generating report:', err?.response?.data || err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExcelExport = (data) => {
-    let exportData = [];
-    let fileName = `${reportType}-report.xlsx`;
+  const downloadAsCSV = (data) => {
+    let rows = [];
 
-    if (reportType === 'expenditures') {
+    if (reportType === 'expenditures' && data?.expenditures) {
       data.expenditures.forEach(exp => {
-        if (exp.expenseItems && exp.expenseItems.length > 0) {
-          exp.expenseItems.forEach(item => {
-            exportData.push({
-              'Event Name': exp.eventName,
-              'Event Type': exp.eventType,
-              'Event Date': formatDate(exp.eventDate),
-              'Bill Number': item.billNumber,
-              'Bill Date': formatDate(item.billDate),
-              'Amount': item.amount,
-              'Vendor': item.vendorName,
-              'Department': exp.department?.name || 'N/A',
-              'Budget Head': exp.budgetHead?.name || 'N/A',
-              'Status': exp.status,
-              'Financial Year': exp.financialYear,
-              'Submitted By': exp.submittedBy?.name || 'N/A'
-            });
-          });
-        } else {
-          // Fallback for requests without bill items (or if backend sent legacy format)
-          exportData.push({
+        const items = exp.expenseItems && exp.expenseItems.length > 0
+          ? exp.expenseItems
+          : [{ billNumber: exp.billNumber || 'N/A', billDate: exp.billDate, amount: exp.billAmount || exp.totalAmount || 0, vendorName: exp.partyName || 'N/A' }];
+        items.forEach(item => {
+          rows.push({
             'Event Name': exp.eventName,
             'Event Type': exp.eventType,
             'Event Date': formatDate(exp.eventDate),
-            'Bill Number': exp.billNumber || 'N/A',
-            'Bill Date': exp.billDate ? formatDate(exp.billDate) : 'N/A',
-            'Amount': exp.billAmount || exp.totalAmount || 0,
-            'Vendor': exp.partyName || 'N/A',
+            'Bill Number': item.billNumber,
+            'Bill Date': item.billDate ? formatDate(item.billDate) : 'N/A',
+            'Amount': item.amount,
+            'Vendor': item.vendorName || 'N/A',
             'Department': exp.department?.name || 'N/A',
             'Budget Head': exp.budgetHead?.name || 'N/A',
             'Status': exp.status,
             'Financial Year': exp.financialYear,
-            'Submitted By': exp.submittedBy?.name || 'N/A'
+            'Submitted By': exp.submittedBy?.name || 'N/A',
           });
-        }
+        });
       });
-    } else if (reportType === 'allocations' && data.allocations) {
-      exportData = data.allocations.map(alloc => ({
+    } else if (reportType === 'allocations' && data?.allocations) {
+      rows = data.allocations.map(alloc => ({
         'Financial Year': alloc.financialYear,
         'Department': alloc.department?.name || 'N/A',
         'Budget Head': alloc.budgetHead?.name || 'N/A',
         'Allocated Amount': alloc.allocatedAmount,
         'Spent Amount': alloc.spentAmount,
         'Remaining Amount': alloc.remainingAmount,
-        'Utilization %': Math.round((alloc.spentAmount / alloc.allocatedAmount) * 100)
+        'Utilization %': alloc.allocatedAmount > 0 ? Math.round((alloc.spentAmount / alloc.allocatedAmount) * 100) : 0,
       }));
     } else if (reportType === 'dashboard') {
-      const consolidated = data.consolidated || data;
-      exportData.push({
-        'Metric': 'Total Allocated',
-        'Value': consolidated.totalAllocated
-      });
-      exportData.push({
-        'Metric': 'Total Spent',
-        'Value': consolidated.totalSpent
-      });
-      exportData.push({
-        'Metric': 'Total Remaining',
-        'Value': consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent)
-      });
-      exportData.push({
-        'Metric': 'Utilization %',
-        'Value': consolidated.utilizationPercentage
-      });
-
+      const consolidated = data?.consolidated || data;
+      rows = [
+        { Metric: 'Total Allocated', Value: consolidated.totalAllocated },
+        { Metric: 'Total Spent', Value: consolidated.totalSpent },
+        { Metric: 'Total Remaining', Value: consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent) },
+        { Metric: 'Utilization %', Value: consolidated.utilizationPercentage },
+      ];
       if (consolidated.departmentBreakdown) {
-        exportData.push({}); // Empty row
-        exportData.push({ 'Metric': 'DEPARTMENT BREAKDOWN' });
+        rows.push({ Metric: '' });
+        rows.push({ Metric: '--- Department Breakdown ---' });
         Object.entries(consolidated.departmentBreakdown).forEach(([dept, d]) => {
-          exportData.push({
-            'Metric': dept,
-            'Allocated': d.allocated,
-            'Spent': d.spent,
-            'Remaining': d.remaining,
-            'Utilization %': d.utilization
-          });
+          rows.push({ Metric: dept, Allocated: d.allocated, Spent: d.spent, Remaining: d.remaining, 'Utilization %': d.utilization });
         });
       }
-    } else if (reportType === 'audit' && data.auditLogs) {
-      exportData = data.auditLogs.map(log => ({
+    } else if (reportType === 'audit' && data?.auditLogs) {
+      rows = data.auditLogs.map(log => ({
         'Timestamp': new Date(log.createdAt).toLocaleString(),
         'Event Type': log.eventType,
         'Actor': log.actor?.name || 'System',
         'Role': log.actor?.role || 'N/A',
         'Entity': log.targetEntity,
-        'ID': log.targetId
+        'ID': log.targetId,
       }));
     }
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    XLSX.writeFile(wb, fileName);
-  };
-
-  const handlePDFExport = (data) => {
-    const doc = new jsPDF();
-    const fileName = `${reportType}-report.pdf`;
-
-    doc.setFontSize(18);
-    doc.text(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report`, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-
-    let columns = [];
-    let rows = [];
-
-    if (reportType === 'expenditures') {
-      columns = ['Event', 'Event Date', 'Bill #', 'Amount', 'Dept', 'Status'];
-      data.expenditures.forEach(exp => {
-        const items = exp.expenseItems && exp.expenseItems.length > 0
-          ? exp.expenseItems
-          : [{ billNumber: exp.billNumber || 'N/A', amount: exp.billAmount || exp.totalAmount || 0 }];
-
-        items.forEach(item => {
-          rows.push([
-            exp.eventName,
-            formatDate(exp.eventDate),
-            item.billNumber,
-            formatCurrency(item.amount),
-            exp.department?.name || 'N/A',
-            exp.status
-          ]);
-        });
-      });
-    } else if (reportType === 'allocations' && data.allocations) {
-      columns = ['FY', 'Dept', 'Budget Head', 'Allocated', 'Spent', 'Remaining'];
-      rows = data.allocations.map(alloc => [
-        alloc.financialYear,
-        alloc.department.name,
-        alloc.budgetHead.name,
-        formatCurrency(alloc.allocatedAmount),
-        formatCurrency(alloc.spentAmount),
-        formatCurrency(alloc.remainingAmount)
-      ]);
-    } else if (reportType === 'dashboard') {
-      const consolidated = data.consolidated || data;
-      columns = ['Category', 'Amount'];
-      rows = [
-        ['Total Allocated', formatCurrency(consolidated.totalAllocated)],
-        ['Total Spent', formatCurrency(consolidated.totalSpent)],
-        ['Total Remaining', formatCurrency(consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent))],
-        ['Utilization %', `${(consolidated.utilizationPercentage || 0).toFixed(2)}%`]
-      ];
-
-      doc.autoTable({
-        head: [columns],
-        body: rows,
-        startY: 40,
-        theme: 'grid',
-        headStyles: { fillColor: [79, 70, 229] }
-      });
-
-      if (consolidated.departmentBreakdown) {
-        doc.text('Department Breakdown', 14, doc.lastAutoTable.finalY + 15);
-        const deptCols = ['Department', 'Allocated', 'Spent', 'Remaining', 'Util %'];
-        const deptRows = Object.entries(consolidated.departmentBreakdown).map(([name, d]) => [
-          name,
-          formatCurrency(d.allocated),
-          formatCurrency(d.spent),
-          formatCurrency(d.remaining),
-          `${(d.utilization || 0).toFixed(2)}%`
-        ]);
-
-        doc.autoTable({
-          head: [deptCols],
-          body: deptRows,
-          startY: doc.lastAutoTable.finalY + 20,
-          theme: 'grid',
-          headStyles: { fillColor: [79, 70, 229] }
-        });
-      }
-      doc.save(fileName);
-      return; // Handled specially
-    } else if (reportType === 'audit' && data.auditLogs) {
-      columns = ['Date', 'Event', 'Actor', 'Entity'];
-      rows = data.auditLogs.map(log => [
-        new Date(log.createdAt).toLocaleDateString(),
-        log.eventType,
-        log.actor?.name || 'System',
-        log.targetEntity
-      ]);
+    if (rows.length === 0) {
+      setError('No data available to export for the selected filters.');
+      return;
     }
 
-    doc.autoTable({
-      head: [columns],
-      body: rows,
-      startY: 40,
-      theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] }
-    });
-
-    doc.save(fileName);
+    try {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const csvOutput = XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportType}-report-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 200);
+    } catch (err) {
+      console.error('CSV export error:', err);
+      setError('Failed to generate CSV file. Please try again.');
+    }
   };
+
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -616,8 +493,18 @@ const Reports = () => {
       />
 
       {error && (
-        <div className="error-message">
-          {error}
+        <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <AlertCircle size={20} />
+            <span>{error}</span>
+          </div>
+          <button
+            className="alert-dismiss"
+            onClick={() => setError(null)}
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
         </div>
       )}
 
@@ -646,33 +533,14 @@ const Reports = () => {
               <PieChart size={24} />
               Dashboard Report
             </button>
-            <button
-              className={`type-btn ${reportType === 'audit' ? 'active' : ''}`}
-              onClick={() => handleReportTypeChange('audit')}
-            >
-              <ClipboardList size={24} />
-              Audit Report
-            </button>
+
           </div>
         </div>
 
         <div className="report-filters">
           <h3>Filters</h3>
           <div className="filters-grid">
-            <div className="filter-group">
-              <label htmlFor="format">Format</label>
-              <select
-                id="format"
-                name="format"
-                value={filters.format}
-                onChange={handleFilterChange}
-                className="filter-select"
-              >
-                <option value="pdf">PDF (Download)</option>
-                <option value="csv">CSV (Download)</option>
-                <option value="excel">Excel (Download)</option>
-              </select>
-            </div>
+
 
             {reportType === 'expenditures' && (
               <>
@@ -697,21 +565,6 @@ const Reports = () => {
                     onChange={handleFilterChange}
                     className="filter-input"
                   />
-                </div>
-                <div className="filter-group">
-                  <label htmlFor="status">Status</label>
-                  <select
-                    id="status"
-                    name="status"
-                    value={filters.status}
-                    onChange={handleFilterChange}
-                    className="filter-select"
-                  >
-                    <option value="">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
                 </div>
               </>
             )}
@@ -792,47 +645,18 @@ const Reports = () => {
             disabled={loading}
           >
             {loading ? (
-              'Generating...'
+              'Downloading...'
             ) : (
               <>
-                <Download size={16} />
-                Generate Report
+                <FileText size={16} />
+                Download CSV
               </>
             )}
           </button>
         </div>
       </div>
 
-      {
-        reportData && filters.format === 'json' && (
-          <div className="report-results">
-            {reportType === 'expenditures' && renderExpenditureReport()}
-            {reportType === 'allocations' && renderAllocationReport()}
-            {reportType === 'dashboard' && renderDashboardReport()}
-            {reportType === 'audit' && (
-              <div className="report-content">
-                <div className="report-summary">
-                  <h3>Audit Summary</h3>
-                  <div className="summary-grid">
-                    <div className="summary-item">
-                      <span className="label">Total Logs:</span>
-                      <span className="value">{reportData.summary.totalLogs}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="label">Event Types:</span>
-                      <span className="value">{Object.keys(reportData.summary.logsByEventType).length}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="label">Actor Roles:</span>
-                      <span className="value">{Object.keys(reportData.summary.logsByActorRole).length}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      }
+
     </div >
   );
 };

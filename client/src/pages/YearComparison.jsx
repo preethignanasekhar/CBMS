@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { allocationAPI, financialYearAPI } from '../services/api';
-import { Download, FileSpreadsheet, FileText, AlertCircle, Calendar } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, AlertCircle, Calendar, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -44,11 +44,16 @@ const YearComparison = () => {
     }));
   };
 
-  useEffect(() => {
-    fetchComparisonData();
-  }, [filters]);
+  // Data is now fetched only when the user clicks the Search button
 
   const fetchComparisonData = async () => {
+    // Validate year format before calling API
+    const fyPattern = /^\d{4}-\d{2,4}$/;
+    if (!fyPattern.test(filters.currentYear) || !fyPattern.test(filters.previousYear)) {
+      setError('Please enter a valid financial year format (e.g. 2024-25)');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -56,8 +61,10 @@ const YearComparison = () => {
       const response = await allocationAPI.getYearComparison(filters);
       setComparisonData(response.data.data);
     } catch (err) {
-      setError('Failed to fetch year comparison data');
-      console.error('Error fetching year comparison:', err);
+      // Show exact server error message if available
+      const serverMsg = err?.response?.data?.message || err?.message || 'Failed to fetch year comparison data';
+      setError(serverMsg);
+      console.error('Error fetching year comparison:', err?.response?.data || err);
     } finally {
       setLoading(false);
     }
@@ -92,50 +99,142 @@ const YearComparison = () => {
   };
 
   const handleExportCSV = () => {
-    if (!comparisonData?.departmentComparison) return;
+    if (!comparisonData) {
+      alert('Please click Search first to load comparison data.');
+      return;
+    }
 
-    const csvData = comparisonData.departmentComparison.map(dept => ({
-      Department: dept.departmentName,
-      [`Allocation ${filters.currentYear}`]: dept.allocationChange.current,
-      [`Allocation ${filters.previousYear}`]: dept.allocationChange.previous,
-      [`Allocation Change %`]: dept.allocationChange.changePercentage,
-      [`Spending ${filters.currentYear}`]: dept.spendingChange.current,
-      [`Spending ${filters.previousYear}`]: dept.spendingChange.previous,
-      [`Spending Change %`]: dept.spendingChange.changePercentage
-    }));
+    const deptData = comparisonData.departmentComparison || [];
+    const headData = comparisonData.budgetHeadComparison || [];
 
-    const ws = XLSX.utils.json_to_sheet(csvData);
-    const csvOutput = XLSX.utils.sheet_to_csv(ws);
+    // Combine department + budget head rows into one CSV
+    const allRows = [];
 
-    const blob = new Blob([csvOutput], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `year-comparison-${filters.currentYear}-vs-${filters.previousYear}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    if (deptData.length > 0) {
+      allRows.push({ Section: '--- Department Comparison ---', Department: '', [`Allocation ${filters.currentYear}`]: '', [`Allocation ${filters.previousYear}`]: '', 'Allocation Change %': '', [`Spending ${filters.currentYear}`]: '', [`Spending ${filters.previousYear}`]: '', 'Spending Change %': '' });
+      deptData.forEach(dept => {
+        allRows.push({
+          Section: 'Department',
+          Department: dept.departmentName,
+          [`Allocation ${filters.currentYear}`]: dept.allocationChange.current,
+          [`Allocation ${filters.previousYear}`]: dept.allocationChange.previous,
+          'Allocation Change %': dept.allocationChange.changePercentage,
+          [`Spending ${filters.currentYear}`]: dept.spendingChange.current,
+          [`Spending ${filters.previousYear}`]: dept.spendingChange.previous,
+          'Spending Change %': dept.spendingChange.changePercentage,
+        });
+      });
+    }
+
+    if (headData.length > 0) {
+      allRows.push({ Section: '--- Budget Head Comparison ---', Department: '', [`Allocation ${filters.currentYear}`]: '', [`Allocation ${filters.previousYear}`]: '', 'Allocation Change %': '', [`Spending ${filters.currentYear}`]: '', [`Spending ${filters.previousYear}`]: '', 'Spending Change %': '' });
+      headData.forEach(head => {
+        allRows.push({
+          Section: 'Budget Head',
+          Department: head.budgetHeadName,
+          [`Allocation ${filters.currentYear}`]: head.allocationChange.current,
+          [`Allocation ${filters.previousYear}`]: head.allocationChange.previous,
+          'Allocation Change %': head.allocationChange.changePercentage,
+          [`Spending ${filters.currentYear}`]: head.spendingChange.current,
+          [`Spending ${filters.previousYear}`]: head.spendingChange.previous,
+          'Spending Change %': head.spendingChange.changePercentage,
+        });
+      });
+    }
+
+    if (allRows.length === 0) {
+      alert('No comparison data available to export. Please Search for a valid year range first.');
+      return;
+    }
+
+    try {
+      const ws = XLSX.utils.json_to_sheet(allRows);
+      const csvOutput = XLSX.utils.sheet_to_csv(ws);
+
+      const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `year-comparison-${filters.currentYear}-vs-${filters.previousYear}.csv`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      // Delay revoke so the browser has time to initiate the download
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 200);
+    } catch (err) {
+      console.error('CSV export error:', err);
+      alert('Failed to generate CSV file. Please try again.');
+    }
   };
 
   const handleExcelExport = () => {
-    if (!comparisonData?.departmentComparison) return;
+    if (!comparisonData) {
+      alert('Please click Search first to load comparison data.');
+      return;
+    }
 
-    const exportData = comparisonData.departmentComparison.map(dept => ({
-      'Department': dept.departmentName,
-      [`Allocation ${filters.currentYear}`]: dept.allocationChange.current,
-      [`Allocation ${filters.previousYear}`]: dept.allocationChange.previous,
-      'Allocation Change %': dept.allocationChange.changePercentage,
-      [`Spending ${filters.currentYear}`]: dept.spendingChange.current,
-      [`Spending ${filters.previousYear}`]: dept.spendingChange.previous,
-      'Spending Change %': dept.spendingChange.changePercentage,
-      [`Utilization ${filters.currentYear} %`]: dept.utilizationChange.current,
-      [`Utilization ${filters.previousYear} %`]: dept.utilizationChange.previous
-    }));
+    const deptData = comparisonData.departmentComparison || [];
+    const headData = comparisonData.budgetHeadComparison || [];
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    if (deptData.length === 0 && headData.length === 0) {
+      alert('No comparison data available to export. Please ensure data exists for the selected years.');
+      return;
+    }
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Year Comparison');
+
+    // ── Sheet 1: Summary ──────────────────────────────────────────────
+    if (comparisonData.overallComparison) {
+      const oc = comparisonData.overallComparison;
+      const summaryData = [
+        { Metric: 'Comparison Period', [`${filters.currentYear}`]: filters.currentYear, [`${filters.previousYear}`]: filters.previousYear },
+        { Metric: 'Total Allocation', [`${filters.currentYear}`]: oc.allocationChange.current, [`${filters.previousYear}`]: oc.allocationChange.previous },
+        { Metric: 'Allocation Change', [`${filters.currentYear}`]: `${oc.allocationChange.changePercentage}%`, [`${filters.previousYear}`]: '' },
+        { Metric: 'Total Spending', [`${filters.currentYear}`]: oc.spendingChange.current, [`${filters.previousYear}`]: oc.spendingChange.previous },
+        { Metric: 'Spending Change', [`${filters.currentYear}`]: `${oc.spendingChange.changePercentage}%`, [`${filters.previousYear}`]: '' },
+        { Metric: 'Budget Utilization %', [`${filters.currentYear}`]: `${oc.utilizationChange.current}%`, [`${filters.previousYear}`]: `${oc.utilizationChange.previous}%` },
+      ];
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+    }
+
+    // ── Sheet 2: Department Comparison ────────────────────────────────
+    if (deptData.length > 0) {
+      const deptExport = deptData.map(dept => ({
+        'Department': dept.departmentName,
+        [`Alloc ${filters.currentYear}`]: dept.allocationChange.current,
+        [`Alloc ${filters.previousYear}`]: dept.allocationChange.previous,
+        'Alloc Change %': dept.allocationChange.changePercentage,
+        [`Spent ${filters.currentYear}`]: dept.spendingChange.current,
+        [`Spent ${filters.previousYear}`]: dept.spendingChange.previous,
+        'Spending Change %': dept.spendingChange.changePercentage,
+        [`Util ${filters.currentYear} %`]: dept.utilizationChange.current,
+        [`Util ${filters.previousYear} %`]: dept.utilizationChange.previous,
+      }));
+      const wsDept = XLSX.utils.json_to_sheet(deptExport);
+      XLSX.utils.book_append_sheet(wb, wsDept, 'Department Comparison');
+    }
+
+    // ── Sheet 3: Budget Head Comparison ───────────────────────────────
+    if (headData.length > 0) {
+      const headExport = headData.map(head => ({
+        'Budget Head': head.budgetHeadName,
+        [`Alloc ${filters.currentYear}`]: head.allocationChange.current,
+        [`Alloc ${filters.previousYear}`]: head.allocationChange.previous,
+        'Alloc Change %': head.allocationChange.changePercentage,
+        [`Spent ${filters.currentYear}`]: head.spendingChange.current,
+        [`Spent ${filters.previousYear}`]: head.spendingChange.previous,
+        'Spending Change %': head.spendingChange.changePercentage,
+        [`Util ${filters.currentYear} %`]: head.utilizationChange.current,
+        [`Util ${filters.previousYear} %`]: head.utilizationChange.previous,
+      }));
+      const wsHead = XLSX.utils.json_to_sheet(headExport);
+      XLSX.utils.book_append_sheet(wb, wsHead, 'Budget Head Comparison');
+    }
+
     XLSX.writeFile(wb, `year-comparison-${filters.currentYear}-vs-${filters.previousYear}.xlsx`);
   };
 
@@ -504,7 +603,15 @@ const YearComparison = () => {
 
       {error && (
         <div className="error-message">
-          {error}
+          <AlertCircle size={18} />
+          <span>{error}</span>
+          <button
+            className="error-close-btn"
+            onClick={() => setError(null)}
+            title="Dismiss"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -561,15 +668,19 @@ const YearComparison = () => {
           </datalist>
         </div>
 
+        <button
+          className="btn btn-search"
+          onClick={fetchComparisonData}
+          disabled={loading}
+          title="Search"
+        >
+          <Search size={18} />
+          <span>Search</span>
+        </button>
+
         <div className="export-actions">
           <button className="btn btn-outline" onClick={handleExportCSV} title="Export CSV">
             <FileText size={18} />
-          </button>
-          <button className="btn btn-outline" onClick={handleExcelExport} title="Export Excel">
-            <FileSpreadsheet size={18} />
-          </button>
-          <button className="btn btn-outline" onClick={handlePDFExport} title="Export PDF">
-            <Download size={18} />
           </button>
         </div>
       </div>
@@ -608,9 +719,6 @@ const YearComparison = () => {
               )}
             </div>
           </div>
-
-          {renderDepartmentComparison()}
-          {renderBudgetHeadComparison()}
         </div>
       )}
     </div>

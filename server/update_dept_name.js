@@ -5,14 +5,10 @@ async function updateDept() {
     try {
         await mongoose.connect('mongodb://127.0.0.1:27017/cbms');
         const result = await Department.updateOne(
-            { name: 'Artificial Intelligence and Machine Learning' },
-            { $set: { name: 'AIML' } }
+            { code: 'AIML' },
+            { $set: { name: 'Artificial Intelligence and Machine Learning' } }
         );
         console.log('Update Result:', result);
-
-        // Also update Artificial Intelligence and Data Science if that was intended, 
-        // but user only specifically mentioned AIML. 
-        // Actually, let's keep it simple as per user request.
 
         process.exit(0);
     } catch (error) {

@@ -399,7 +399,7 @@ const getDepartmentDetail = async (req, res) => {
     const statusBreakdown = {
       pending: expenditures.filter(e => e.status === 'pending').length,
       verified: expenditures.filter(e => e.status === 'verified').length,
-      approved: expenditures.filter(e => e.status === 'approved').length,
+      approved: expenditures.filter(e => e.status === 'approved' || e.status === 'finalized').length,
       rejected: expenditures.filter(e => e.status === 'rejected').length
     };
 

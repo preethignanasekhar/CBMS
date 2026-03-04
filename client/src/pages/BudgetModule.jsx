@@ -30,6 +30,7 @@ import './BudgetStyles.scss';
 import AIRequirementGenerator from '../components/AI/AIRequirementGenerator';
 
 export const BudgetAllocations = () => {
+    const navigate = useNavigate();
     const [allocations, setAllocations] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [budgetHeads, setBudgetHeads] = useState([]);
@@ -44,10 +45,15 @@ export const BudgetAllocations = () => {
         financialYear: searchParams.get('financialYear') || ''
     });
     const [financialYears, setFinancialYears] = useState([]);
+    const [tempFY, setTempFY] = useState(filters.financialYear);
 
     useEffect(() => {
         fetchData();
     }, [filters]);
+
+    const handleSearch = () => {
+        setFilters(prev => ({ ...prev, financialYear: tempFY }));
+    };
 
     const fetchData = async () => {
         try {
@@ -112,7 +118,7 @@ export const BudgetAllocations = () => {
         const month = date.getMonth();
         const year = date.getFullYear();
         const startYear = month >= 3 ? year : year - 1;
-        setFilters(prev => ({ ...prev, financialYear: `${startYear}-${startYear + 1}` }));
+        setTempFY(`${startYear}-${startYear + 1}`);
     };
 
     const getUtilizationPercentage = (allocated, spent) => {
@@ -140,13 +146,69 @@ export const BudgetAllocations = () => {
             <PageHeader
                 title="Budget Allocations Management"
                 subtitle="Manage and monitor budget allocations across departments"
-            />
+            >
+                <div className="header-actions">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="btn btn-outline"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <ArrowLeft size={18} /> Back
+                    </button>
+                </div>
+            </PageHeader>
 
             {error && (
-                <div className="error-message">
-                    {error}
+                <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <AlertCircle size={20} />
+                        <span>{error}</span>
+                    </div>
+                    <button
+                        className="alert-dismiss"
+                        onClick={() => setError(null)}
+                        title="Dismiss"
+                    >
+                        <X size={18} />
+                    </button>
                 </div>
             )}
+
+            <div className="filters-section" style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', marginBottom: '2rem' }}>
+                <div className="filter-group" style={{ flex: '0 0 300px' }}>
+                    <label className="filter-label" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Financial Year</label>
+                    <div className="flexible-year-input">
+                        <input
+                            type="text"
+                            placeholder="e.g. 2024-2025"
+                            value={tempFY}
+                            onChange={(e) => setTempFY(e.target.value)}
+                            className="year-input"
+                            list="fy-datalist"
+                        />
+                        <datalist id="fy-datalist">
+                            {financialYears.map(year => (
+                                <option key={year} value={year} />
+                            ))}
+                        </datalist>
+                        <div className="date-picker-helper">
+                            <Calendar size={20} />
+                            <input
+                                type="date"
+                                className="hidden-date-picker"
+                                onChange={handleDateToFY}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <button
+                    onClick={handleSearch}
+                    className="btn btn-primary"
+                    style={{ height: '42px', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 1.5rem' }}
+                >
+                    <Search size={18} /> Search
+                </button>
+            </div>
 
             {stats && (
                 <div className="stats-grid">
@@ -189,57 +251,30 @@ export const BudgetAllocations = () => {
                 </div>
             )}
 
-            <div className="filters-section">
 
-                <div className="filter-group">
-                    <select
-                        name="departmentId"
-                        value={filters.departmentId}
-                        onChange={handleFilterChange}
-                        className="filter-select"
-                    >
-                        <option value="">All Departments</option>
-                        {departments.map(dept => (
-                            <option key={dept._id} value={dept._id}>{dept.name}</option>
-                        ))}
-                    </select>
-                </div>
-                <div className="filter-group">
-                    <select
-                        name="budgetHeadId"
-                        value={filters.budgetHeadId}
-                        onChange={handleFilterChange}
-                        className="filter-select"
-                    >
-                        <option value="">All Budget Heads</option>
-                        {budgetHeads.map(head => (
-                            <option key={head._id} value={head._id}>{head.name}</option>
-                        ))}
-                    </select>
-                </div>
-                <div className="filter-group">
-                    <div className="flexible-year-input">
-                        <input
-                            list="fy-suggestions"
-                            name="financialYear"
-                            value={filters.financialYear}
-                            onChange={handleFilterChange}
-                            className="filter-select year-input"
-                            placeholder="Financial Year"
-                        />
-                        <datalist id="fy-suggestions">
-                            {financialYears.map(year => (
-                                <option key={year} value={year} />
-                            ))}
-                        </datalist>
-                        <div className="date-picker-helper" title="Choose date to set Year">
-                            <Calendar size={18} />
-                            <input
-                                type="date"
-                                onChange={handleDateToFY}
-                                className="hidden-date-picker"
-                            />
-                        </div>
+
+            <div className="charts-section" style={{ marginBottom: '2rem' }}>
+                <div className="chart-card" style={{ background: 'white', padding: '1.5rem', borderRadius: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                    <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', fontWeight: '600', color: 'black' }}>
+                        {allocations.length > 0 && allocations[0].budgetHeadName ? `${allocations[0].budgetHeadName} - ` : ''}Allocation vs Spending by Department
+                    </h3>
+                    <div style={{ height: '350px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                data={allocations.slice(0, 8)}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="departmentCode" tick={{ fontSize: 11 }} interval={0} height={40} />
+                                <YAxis tick={{ fontSize: 12 }} />
+                                <RechartsTooltip
+                                    formatter={(value) => `₹${value.toLocaleString()}`}
+                                />
+                                <Legend verticalAlign="top" height={36} />
+                                <Bar dataKey="allocatedAmount" name="Allocated" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="spentAmount" name="Spent" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
             </div>
@@ -262,7 +297,7 @@ export const BudgetAllocations = () => {
                                 <tr key={allocation._id}>
                                     <td>
                                         <div className="department-info">
-                                            <span className="dept-name">{allocation.departmentName}</span>
+                                            <span className="dept-name">{allocation.departmentCode}</span>
                                         </div>
                                     </td>
                                     <td>
@@ -655,40 +690,11 @@ export const BudgetHeads = () => {
                 </div>
             )}
 
-            <div className="filters-section">
 
-                <div className="filter-group">
-                    <select
-                        name="category"
-                        value={filters.category}
-                        onChange={handleFilterChange}
-                        className="filter-select"
-                    >
-                        <option value="">All Categories</option>
-                        {categories.map(category => (
-                            <option key={category.id} value={category.id}>
-                                {category.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div className="filter-group">
-                    <select
-                        name="isActive"
-                        value={filters.isActive}
-                        onChange={handleFilterChange}
-                        className="filter-select"
-                    >
-                        <option value="">All Status</option>
-                        <option value="true">Active</option>
-                        <option value="false">Inactive</option>
-                    </select>
-                </div>
-            </div>
 
             <div className="budget-heads-grid">
                 {budgetHeads.map((head) => (
-                    <div key={head._id} className="budget-head-card" onClick={() => navigate(`/budget-head-detail/${head._id}`)} style={{ cursor: 'pointer' }}>
+                    <div key={head._id} className="budget-head-card" onClick={() => navigate(`/allocations?budgetHead=${head._id}`)} style={{ cursor: 'pointer' }}>
                         <div className="card-header">
                             <div className="head-info">
                                 <h3 className="head-name">{head.name}</h3>
@@ -709,17 +715,6 @@ export const BudgetHeads = () => {
                                 >
                                     {head.category.toUpperCase()}
                                 </span>
-                            </div>
-
-                            <p className="head-description">
-                                {head.description || 'No description provided'}
-                            </p>
-
-                            <div className="head-meta">
-                                <p className="created-date">
-                                    Created: {new Date(head.createdAt).toLocaleDateString()}
-                                </p>
-                                <p className="head-id">ID: {head._id}</p>
                             </div>
                         </div>
 
@@ -761,16 +756,18 @@ export const BudgetHeads = () => {
                 ))}
             </div>
 
-            {budgetHeads.length === 0 && (
-                <div className="no-budget-heads">
-                    <div className="no-budget-heads-icon">
-                        <IndianRupee size={48} />
+            {
+                budgetHeads.length === 0 && (
+                    <div className="no-budget-heads">
+                        <div className="no-budget-heads-icon">
+                            <IndianRupee size={48} />
+                        </div>
+                        <h3>No Budget Heads Found</h3>
+                        <p>No budget heads found matching the current filters.</p>
                     </div>
-                    <h3>No Budget Heads Found</h3>
-                    <p>No budget heads found matching the current filters.</p>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 export const BudgetProposalForm = () => {
@@ -1125,16 +1122,25 @@ export const BudgetProposalForm = () => {
     const refreshAllStatsRef = useRef(refreshAllStats);
 
     const handleAIRequirements = (data) => {
-        const { selectedItems, budgetSuggestions } = data;
+        const { selectedItems, budgetSuggestions, chatNotes } = data;
 
-        // Map selected checklist items to proposal notes
-        if (selectedItems.length > 0) {
-            const checklistText = `\n\nAI Suggested Requirements:\n- ${selectedItems.join('\n- ')}`;
+        // Map selected checklist items and chat notes to proposal notes
+        if (selectedItems.length > 0 || (chatNotes && chatNotes.length > 0)) {
+            let notesAppendText = '';
+
+            if (chatNotes && chatNotes.length > 0) {
+                notesAppendText += `\n\nEvent Needs (From Chat):\n- ${chatNotes.join('\n- ')}`;
+            }
+
+            if (selectedItems.length > 0) {
+                notesAppendText += `\n\nAI Suggested Requirements:\n- ${selectedItems.join('\n- ')}`;
+            }
+
             setFormData(prev => ({
                 ...prev,
-                notes: (prev.notes || '') + checklistText
+                notes: (prev.notes || '') + notesAppendText
             }));
-            setSuccess(`AI successfully analyzed "${data.eventName || 'the requirements'}" and added ${selectedItems.length} items to notes.`);
+            setSuccess(`AI successfully analyzed "${data.eventName || 'the requirements'}" and added items/notes to the proposal.`);
         }
     };
     const formDataRef = useRef(formData);
@@ -1376,7 +1382,6 @@ export const BudgetProposalForm = () => {
                 <div className="proposal-form-column">
                     <form onSubmit={handleSubmit} className="budget-proposal-form">
                         <div className="form-section">
-                            <h3>Basic Information</h3>
 
                             <div className="form-row">
                                 <div className="form-group">
@@ -1410,37 +1415,6 @@ export const BudgetProposalForm = () => {
                                         </div>
                                     </div>
                                 </div>
-
-                                <div className="form-group">
-                                    <label>Department <span className="required">*</span></label>
-                                    <select
-                                        name="department"
-                                        value={formData.department}
-                                        onChange={handleInputChange}
-                                        required
-                                        disabled={isEditMode || ['department', 'hod', 'officer', 'vp', 'p'].includes(user?.role)}
-                                    >
-                                        <option value="">Select Department</option>
-                                        {departments.map(dept => (
-                                            <option key={dept._id} value={dept._id}>
-                                                {dept.name} ({dept.code})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="form-group">
-                                <label>Notes</label>
-                                <textarea
-                                    name="notes"
-                                    value={formData.notes}
-                                    onChange={handleInputChange}
-                                    placeholder="Additional notes for the proposal"
-                                    rows="3"
-                                    disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                    style={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
-                                />
                             </div>
                         </div>
 
@@ -1787,11 +1761,7 @@ export const BudgetProposalForm = () => {
                     </form>
                 </div>
 
-                <div className="ai-planner-column">
-                    <div className="ai-planner-sticky">
-                        <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
-                    </div>
-                </div>
+
             </div>
         </div>
     );
@@ -1804,6 +1774,10 @@ export const BudgetProposals = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [filters, setFilters] = useState({
+        status: '',
+        financialYear: '2025-2026'
+    });
+    const [tempFilters, setTempFilters] = useState({
         status: '',
         financialYear: '2025-2026'
     });
@@ -1838,10 +1812,14 @@ export const BudgetProposals = () => {
 
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
-        setFilters(prev => ({
+        setTempFilters(prev => ({
             ...prev,
             [name]: value
         }));
+    };
+
+    const handleSearch = () => {
+        setFilters({ ...tempFilters });
     };
 
     const handleSubmitProposal = async (id) => {
@@ -2010,23 +1988,23 @@ export const BudgetProposals = () => {
                 </div>
             )}
 
-            <div className="filters-section">
-                <div className="form-group">
+            <div className="filters-section" style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: '1', minWidth: '200px' }}>
                     <label>Financial Year</label>
                     <input
                         type="text"
                         name="financialYear"
-                        value={filters.financialYear}
+                        value={tempFilters.financialYear}
                         onChange={handleFilterChange}
                         placeholder="e.g., 2025-2026"
                     />
                 </div>
 
-                <div className="form-group">
+                <div className="form-group" style={{ flex: '1', minWidth: '200px' }}>
                     <label>Status</label>
                     <select
                         name="status"
-                        value={filters.status}
+                        value={tempFilters.status}
                         onChange={handleFilterChange}
                     >
                         <option value="">All Status</option>
@@ -2037,6 +2015,17 @@ export const BudgetProposals = () => {
                         <option value="rejected">Rejected</option>
                         <option value="revised">Revised</option>
                     </select>
+                </div>
+
+                <div className="form-group" style={{ flexShrink: 0 }}>
+                    <label style={{ visibility: 'hidden', display: 'block' }}>Search</label>
+                    <button
+                        onClick={handleSearch}
+                        className="btn btn-primary"
+                        style={{ height: '42px', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 1.5rem', whiteSpace: 'nowrap' }}
+                    >
+                        <Search size={18} /> Search
+                    </button>
                 </div>
             </div>
 

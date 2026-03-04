@@ -4,8 +4,9 @@ import { allocationAPI, expenditureAPI, departmentsAPI, reportAPI, financialYear
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getCurrentFinancialYear, getPreviousFinancialYear } from '../utils/dateUtils';
-import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight, Calendar } from 'lucide-react';
+import { IndianRupee, CreditCard, Wallet, PieChart, List, Receipt, TrendingUp, TrendingDown, AlertCircle, ArrowRight, Calendar, Building, Search, X } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
+import StatCard from '../components/Common/StatCard';
 import './ConsolidatedDashboard.scss';
 
 const ConsolidatedDashboard = () => {
@@ -32,6 +33,7 @@ const ConsolidatedDashboard = () => {
 
   const [selectedFinancialYear, setSelectedFinancialYear] = useState(currentFY);
   const [financialYears, setFinancialYears] = useState([]);
+  const [tempFY, setTempFY] = useState(selectedFinancialYear);
 
   const { socket } = useSocket();
 
@@ -56,7 +58,11 @@ const ConsolidatedDashboard = () => {
     const month = date.getMonth();
     const year = date.getFullYear();
     const startYear = month >= 3 ? year : year - 1;
-    setSelectedFinancialYear(`${startYear}-${startYear + 1}`);
+    setTempFY(`${startYear}-${startYear + 1}`);
+  };
+
+  const handleSearch = () => {
+    setSelectedFinancialYear(tempFY);
   };
 
   useEffect(() => {
@@ -194,61 +200,20 @@ const ConsolidatedDashboard = () => {
       />
 
       {error && (
-        <div className="error-message">
-          {error}
+        <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <AlertCircle size={20} />
+            <span>{error}</span>
+          </div>
+          <button
+            className="alert-dismiss"
+            onClick={() => setError(null)}
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
         </div>
       )}
-
-      <div className="dashboard-filters">
-        <div className="filter-group">
-          <label htmlFor="department">Department</label>
-          <select
-            id="department"
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Departments</option>
-            {departments.map(dept => (
-              <option key={dept._id} value={dept._id}>{dept.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group year-filter-group">
-          <label htmlFor="financialYear">Financial Year</label>
-          <div className="flexible-year-input">
-            <input
-              list="fy-suggestions"
-              id="financialYear"
-              value={selectedFinancialYear}
-              onChange={(e) => setSelectedFinancialYear(e.target.value)}
-              className="filter-input"
-              placeholder="e.g. 2025-2026"
-            />
-            <datalist id="fy-suggestions">
-              {financialYears.length > 0 ? (
-                financialYears.map(year => (
-                  <option key={year} value={year} />
-                ))
-              ) : (
-                <>
-                  <option value={currentFY} />
-                  <option value={previousFY} />
-                  <option value={fyMinus2} />
-                </>
-              )}
-            </datalist>
-            <div className="date-picker-helper" title="Choose date to set Year">
-              <Calendar size={18} />
-              <input
-                type="date"
-                onChange={handleDateToFY}
-                className="hidden-date-picker"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
 
       {stats && (
         <div className="overview-stats">
@@ -257,7 +222,7 @@ const ConsolidatedDashboard = () => {
               <IndianRupee size={32} />
             </div>
             <div className="stat-info">
-              <div className="stat-number">{formatCurrency(stats.summary.totalAllocated)}</div>
+              <div className="stat-number">{formatCurrency(stats.summary?.totalAllocated || 0)}</div>
               <div className="stat-label">Total Budget Allotted</div>
             </div>
           </div>
@@ -266,7 +231,7 @@ const ConsolidatedDashboard = () => {
               <CreditCard size={32} />
             </div>
             <div className="stat-info">
-              <div className="stat-number">{formatCurrency(stats.summary.totalSpent)}</div>
+              <div className="stat-number">{formatCurrency(stats.summary?.totalSpent || 0)}</div>
               <div className="stat-label">Expenses Incurred Till Date</div>
             </div>
           </div>
@@ -275,7 +240,7 @@ const ConsolidatedDashboard = () => {
               <Wallet size={32} />
             </div>
             <div className="stat-info">
-              <div className="stat-number">{formatCurrency(stats.summary.totalRemaining)}</div>
+              <div className="stat-number">{formatCurrency(stats.summary?.totalRemaining || 0)}</div>
               <div className="stat-label">Value of Un-utilized Budget</div>
             </div>
           </div>
@@ -284,7 +249,7 @@ const ConsolidatedDashboard = () => {
               <PieChart size={32} />
             </div>
             <div className="stat-info">
-              <div className="stat-number">{stats.summary.utilizationPercentage}%</div>
+              <div className="stat-number">{stats.summary?.utilizationPercentage || 0}%</div>
               <div className="stat-label">Percentage Utilized</div>
             </div>
           </div>
@@ -298,21 +263,23 @@ const ConsolidatedDashboard = () => {
         <div className="department-breakdown">
           <h2 style={{ color: 'black', marginBottom: '2rem', fontWeight: 700, fontSize: '1.5rem', textShadow: 'none' }}>Department-wise Breakdown</h2>
           <div className="department-cards">
-            {departmentStats.map((dept) => {
-              // Get extended data from report if available
-              const reportData = stats?.consolidated?.departmentBreakdown?.[dept.name] || {};
+            {departmentStats.map((dept, index) => {
+              const colors = ['primary', 'success', 'info', 'warning'];
+              const cardClass = colors[index % 4];
 
               return (
                 <div
                   key={dept._id}
-                  className="department-card-minimal"
+                  className={`stat-card ${cardClass}`}
+                  onClick={() => navigate(`/department-detail/${dept._id}`)}
+                  style={{ cursor: 'pointer' }}
                 >
-                  <span
-                    className="department-code-badge"
-                    onClick={() => navigate(`/department-detail/${dept._id}`)}
-                  >
-                    {dept.code}
-                  </span>
+                  <div className="stat-icon">
+                    <Building size={32} color="white" />
+                  </div>
+                  <div className="stat-info">
+                    <div className="stat-number">{dept.code}</div>
+                  </div>
                 </div>
               );
             })}

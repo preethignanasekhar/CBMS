@@ -8,7 +8,7 @@ const FloatingAIChat = () => {
     const [messages, setMessages] = useState([
         {
             role: 'assistant',
-            content: "Hi! I'm your AI Management Assistant. How can I help you analyze the dashboard data or manage approvals today?"
+            content: "Hi! I'm your AI Management Assistant. I can help you analyze budgets, track utilization, monitor approvals, and identify trends in real time. What would you like to explore today?"
         }
     ]);
     const [input, setInput] = useState('');
@@ -89,6 +89,37 @@ const FloatingAIChat = () => {
         }
     };
 
+    const renderMessageContent = (content) => {
+        return content.split('\n').map((line, i) => {
+            // Handle bullet points
+            if (line.trim().startsWith('* ')) {
+                const parts = line.trim().substring(2).split(/(\*\*.*?\*\*)/);
+                return (
+                    <li key={i} className="mb-1 ml-4 list-disc">
+                        {parts.map((part, pi) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                                return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                            }
+                            return part;
+                        })}
+                    </li>
+                );
+            }
+            // Handle regular lines with potential bolding
+            const parts = line.split(/(\*\*.*?\*\*)/);
+            return (
+                <p key={i} className={line.trim() ? 'mb-2' : 'h-2'}>
+                    {parts.map((part, pi) => {
+                        if (part.startsWith('**') && part.endsWith('**')) {
+                            return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                        }
+                        return part;
+                    })}
+                </p>
+            );
+        });
+    };
+
     return (
         <div className={`floating-ai-chat ${isOpen ? 'open' : ''}`}>
             {/* The Chat Button */}
@@ -133,7 +164,7 @@ const FloatingAIChat = () => {
                                     </div>
                                 )}
                                 <div className="message-content">
-                                    <p>{msg.content}</p>
+                                    {renderMessageContent(msg.content)}
                                 </div>
                             </div>
                         ))}
@@ -157,7 +188,7 @@ const FloatingAIChat = () => {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Ask me about approvals or budget data..."
+                            placeholder="Ask about highest budgets, utilization, or pending approvals..."
                             disabled={isLoading}
                         />
                         <button type="submit" disabled={!input.trim() || isLoading} className="send-btn">

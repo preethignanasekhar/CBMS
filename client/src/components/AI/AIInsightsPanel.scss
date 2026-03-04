@@ -161,14 +161,85 @@
       font-size: 1.1rem;
       font-weight: 500;
       color: #fff;
-      margin-bottom: 0.5rem;
+      margin-bottom: 1.25rem;
       line-height: 1.5;
     }
 
+    .briefing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+
+      .briefing-item {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.75rem;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.1);
+          transform: translateY(-2px);
+          border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        svg {
+          flex-shrink: 0;
+        }
+      }
+    }
+
     .explanation-text {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: var(--text-muted);
       line-height: 1.6;
+      font-style: italic;
+    }
+  }
+
+  .benchmarking-section {
+    .bench-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .bench-item {
+      .bench-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        margin-bottom: 0.4rem;
+
+        .dept-code {
+          font-weight: 700;
+          color: #c7d2fe;
+        }
+
+        .efficiency {
+          color: #34d399;
+          font-weight: 600;
+        }
+      }
+
+      .bench-progress {
+        height: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 2px;
+        overflow: hidden;
+
+        .bar {
+          height: 100%;
+          background: linear-gradient(90deg, var(--ai-primary), var(--ai-secondary));
+          border-radius: 2px;
+        }
+      }
     }
   }
 

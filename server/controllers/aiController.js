@@ -131,8 +131,17 @@ const getYearComparison = async (req, res) => {
  */
 const getInsights = async (req, res) => {
     try {
-        const { financialYear } = req.query;
+        const { financialYear, query } = req.query;
         const fy = financialYear || aiService.getCurrentFinancialYear();
+
+        if (query) {
+            const reply = await aiService.processChatQuery(query, fy);
+            return res.json({
+                success: true,
+                reply,
+                financialYear: fy
+            });
+        }
 
         const insights = await aiService.generateExplanation(fy);
 

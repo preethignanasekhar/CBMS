@@ -391,58 +391,204 @@ const generateYearComparison = async (currentFY, previousFY) => {
  * @param {string} financialYear - Financial year to analyze
  * @returns {Object} NL explanations for various metrics
  */
+/**
+ * Feature 7: Predictive Budget Exhaustion (PDE)
+ * Projects when a department will run out of budget based on burn rate.
+ */
+const calculatePredictiveExhaustion = async (financialYear) => {
+    const today = new Date();
+    const fyStartYear = parseInt(financialYear.split('-')[0]);
+    const fyStart = new Date(fyStartYear, 3, 1);
+    const daysElapsed = Math.max(1, Math.ceil((today - fyStart) / (1000 * 60 * 60 * 24)));
+
+    const allocations = await Allocation.find({ financialYear, status: 'active' }).populate('department', 'name').lean();
+
+    return allocations.map(alloc => {
+        const burnRatePerDay = alloc.spentAmount / daysElapsed;
+        const remaining = alloc.allocatedAmount - alloc.spentAmount;
+
+        let projectedDaysLeft = Infinity;
+        let pdeDate = null;
+
+        if (burnRatePerDay > 0) {
+            projectedDaysLeft = Math.floor(remaining / burnRatePerDay);
+            pdeDate = new Date(today.getTime() + projectedDaysLeft * 24 * 60 * 60 * 1000);
+        }
+
+        return {
+            departmentName: alloc.department.name,
+            budgetHeadName: alloc.budgetHeadName,
+            currentUtilization: (alloc.spentAmount / alloc.allocatedAmount) * 100,
+            projectedDaysLeft,
+            pdeDate: pdeDate ? pdeDate.toISOString().split('T')[0] : 'N/A',
+            isAtRisk: projectedDaysLeft < 60 && alloc.spentAmount > 0
+        };
+    }).filter(p => p.isAtRisk).sort((a, b) => a.projectedDaysLeft - b.projectedDaysLeft);
+};
+
+/**
+ * Feature 8: Peer Benchmarking & Efficiency Analysis
+ */
+const generatePeerBenchmarking = async (financialYear) => {
+    const departments = await Department.find().lean();
+    const stats = [];
+
+    for (const dept of departments) {
+        const [allocs, exps] = await Promise.all([
+            Allocation.find({ department: dept._id, financialYear }),
+            Expenditure.find({ department: dept._id, financialYear, status: 'finalized' })
+        ]);
+
+        const totalAllocated = allocs.reduce((sum, a) => sum + a.allocatedAmount, 0);
+        const totalSpent = allocs.reduce((sum, a) => sum + a.spentAmount, 0);
+        const eventCount = exps.length;
+
+        stats.push({
+            name: dept.name,
+            code: dept.code,
+            efficiencyRatio: eventCount > 0 ? (totalSpent / eventCount) : 0, // Cost per event
+            utilization: totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0,
+            eventCount
+        });
+    }
+
+    return stats.sort((a, b) => a.efficiencyRatio - b.efficiencyRatio);
+};
+
+/**
+ * Feature 5: Natural-Language Explanations (Enhanced Morning Briefing)
+ */
 const generateExplanation = async (financialYear) => {
     const riskScores = await calculateRiskScores(financialYear);
     const anomalies = await detectAnomalies(financialYear);
+    const pde = await calculatePredictiveExhaustion(financialYear);
+    const bench = await generatePeerBenchmarking(financialYear);
 
-    // Overall status
     const highRiskCount = riskScores.filter(r => r.riskLevel === 'High').length;
-    const totalDepts = riskScores.length;
     const criticalAnomalies = anomalies.filter(a => a.severity === 'critical').length;
+    const pendingApprovals = await Expenditure.countDocuments({ status: { $in: ['pending', 'verified'] } });
 
-    // Generate overall explanation
-    let overallStatus = '';
-    if (criticalAnomalies > 0) {
-        overallStatus = `⚠️ ${criticalAnomalies} critical spending anomalies detected requiring immediate attention.`;
-    } else if (highRiskCount > totalDepts * 0.3) {
-        overallStatus = `📊 ${highRiskCount} of ${totalDepts} departments show elevated budget risk. Mid-year review recommended.`;
+    // Generative Briefing Logic
+    let briefing = `Good morning! Assessment for FY ${financialYear}: `;
+
+    if (criticalAnomalies > 0 || highRiskCount > 0) {
+        briefing += `There are ${criticalAnomalies} critical anomalies and ${highRiskCount} departments at high risk. `;
     } else {
-        overallStatus = `✅ Overall budget utilization is within expected parameters for this point in the financial year.`;
+        briefing += `Financial operations are currently stable. `;
     }
 
-    // Calculate average utilization
-    const avgUtilization = riskScores.length > 0
-        ? riskScores.reduce((sum, r) => sum + r.utilizationPercent, 0) / riskScores.length
-        : 0;
+    if (pde.length > 0) {
+        briefing += `Attention needed: ${pde[0].departmentName}'s ${pde[0].budgetHeadName} is projected to exhaust by ${pde[0].pdeDate}. `;
+    }
 
-    const fyProgress = riskScores.length > 0 ? riskScores[0].fyProgressPercent : 0;
+    if (pendingApprovals > 0) {
+        briefing += `You have ${pendingApprovals} items in the approval queue waiting for action. `;
+    }
 
-    let utilizationExplanation = '';
-    if (avgUtilization > fyProgress + 15) {
-        utilizationExplanation = `Average utilization (${avgUtilization.toFixed(1)}%) is ahead of FY progress (${fyProgress.toFixed(1)}%) due to early expenditure activities.`;
-    } else if (avgUtilization < fyProgress - 15) {
-        utilizationExplanation = `Average utilization (${avgUtilization.toFixed(1)}%) is behind FY progress (${fyProgress.toFixed(1)}%). Spending may accelerate in coming months.`;
-    } else {
-        utilizationExplanation = `Average utilization (${avgUtilization.toFixed(1)}%) aligns with FY progress (${fyProgress.toFixed(1)}%).`;
+    // Efficiency Insight
+    const topEfficient = bench.find(b => b.eventCount > 2);
+    if (topEfficient) {
+        briefing += `Insight: ${topEfficient.name} is showing high efficiency with an average cost of ₹${Math.round(topEfficient.efficiencyRatio).toLocaleString()} per event.`;
     }
 
     return {
-        overallStatus,
-        utilizationExplanation,
-        riskSummary: {
-            high: highRiskCount,
-            medium: riskScores.filter(r => r.riskLevel === 'Medium').length,
-            low: riskScores.filter(r => r.riskLevel === 'Low').length,
-            total: totalDepts
-        },
-        anomalySummary: {
-            critical: criticalAnomalies,
-            warning: anomalies.filter(a => a.severity === 'warning').length,
-            info: anomalies.filter(a => a.severity === 'info').length,
-            total: anomalies.length
-        },
-        generatedAt: new Date().toISOString()
+        overallStatus: briefing,
+        utilizationExplanation: `System-wide utilization is at ${Math.round(riskScores.reduce((a, b) => a + b.utilizationPercent, 0) / (riskScores.length || 1))}% against a calendar progress of ${Math.round(riskScores[0]?.fyProgressPercent || 0)}%.`,
+        briefingItems: [
+            { icon: 'alert', text: `${criticalAnomalies} Critical Alerts` },
+            { icon: 'calendar', text: pde.length > 0 ? `Next exhaustion: ${pde[0].pdeDate}` : 'No immediate exhaustion risk' },
+            { icon: 'trending', text: `${highRiskCount} High Risk Depts` }
+        ],
+        pdeRecommendations: pde.slice(0, 3),
+        benchmarking: bench.slice(0, 5),
     };
+};
+
+/**
+ * Feature 9: Smart AI Chat Assistant (Data-Driven)
+ * Processes natural language queries using real database state.
+ */
+const processChatQuery = async (query, financialYear) => {
+    const q = query.toLowerCase();
+    const fy = financialYear || getCurrentFinancialYear();
+
+    // 1. "Highest Budget" / "Maximum Amount"
+    if (q.includes('highest') || q.includes('maximum') || q.includes('top') && (q.includes('budget') || q.includes('allocation'))) {
+        const topAllocs = await Allocation.aggregate([
+            { $match: { financialYear: fy, status: 'active' } },
+            { $group: { _id: '$department', total: { $sum: '$allocatedAmount' } } },
+            { $sort: { total: -1 } },
+            { $limit: 3 },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'dept'
+                }
+            }
+        ]);
+
+        if (topAllocs.length === 0) return "I couldn't find any budget allocations for this period.";
+
+        const primary = topAllocs[0];
+        const secondary = topAllocs[1];
+        let response = `The **${primary.dept[0]?.name || 'Unknown'}** has the highest allocated budget of ₹${primary.total.toLocaleString()}.`;
+        if (secondary) {
+            response += `\nThe next highest is the **${secondary.dept[0]?.name || 'Unknown'}** with ₹${secondary.total.toLocaleString()}.`;
+        }
+        response += `\n\nWould you like to compare allocated vs utilized amounts for these departments?`;
+        return response;
+    }
+
+    // 2. "Utilization" / "Efficiency" / "Comparison"
+    if (q.includes('utilization') || q.includes('utilize') || q.includes('compare') || q.includes('yes')) {
+        const stats = await generatePeerBenchmarking(fy);
+        const topEfficient = stats.filter(s => s.eventCount > 0).sort((a, b) => b.eventCount - a.eventCount)[0];
+        const lowUtilized = [...stats].sort((a, b) => a.utilization - b.utilization)[0];
+
+        let response = "Here is the utilization summary:\n\n";
+        stats.slice(0, 3).forEach(s => {
+            response += `* **${s.name}**: ${Math.round(s.utilization)}% utilized\n`;
+        });
+
+        if (topEfficient) {
+            response += `* **${topEfficient.name}**: ${Math.round(topEfficient.utilization)}% utilized (Highest event output: ${topEfficient.eventCount} events)\n`;
+        }
+
+        response += `\n⚠️ **${lowUtilized.name}** has the lowest utilization rate at ${Math.round(lowUtilized.utilization)}%. \n\nWould you like me to show pending approvals for this department?`;
+        return response;
+    }
+
+    // 3. "Approvals" / "Pending"
+    if (q.includes('approval') || q.includes('pending') || q.includes('queue')) {
+        const pendingExps = await Expenditure.find({ status: { $in: ['pending', 'verified'] } }).populate('department', 'name');
+        const totalAmount = pendingExps.reduce((sum, e) => sum + e.amount, 0);
+        const count = pendingExps.length;
+
+        if (count === 0) return "Great news! There are no pending approvals currently in the queue. All workflows are up to date.";
+
+        let response = `Here's the current state of the approval queue:\n\nThere are **${count} pending items** waiting for action, worth a total of **₹${totalAmount.toLocaleString()}**.`;
+
+        // Distribution
+        const deptGroups = {};
+        pendingExps.forEach(e => {
+            const name = e.department?.name || 'Academic';
+            deptGroups[name] = (deptGroups[name] || 0) + 1;
+        });
+
+        const topDept = Object.entries(deptGroups).sort((a, b) => b[1] - a[1])[0];
+        if (topDept) {
+            response += `\n\n**${topDept[0]}** has the most pending requests (${topDept[1]} items). Approving these would typically increase their budget utilization significantly.`;
+        }
+
+        response += `\n\nShall I prioritize the most urgent items (based on event dates) for you?`;
+        return response;
+    }
+
+    // 4. Default Smart Fallback
+    const brief = await generateExplanation(fy);
+    return `Here’s what I found from the latest dashboard data:\n\n${brief.overallStatus}\n\nI can also help you compare department budgets, analyze utilization trends, or prioritize your approval queue. What would you like to explore?`;
 };
 
 /**
@@ -764,6 +910,9 @@ module.exports = {
     generateYearComparison,
     generateExplanation,
     detectRuleViolations,
+    analyzeEventRequirements,
     getCurrentFinancialYear,
-    analyzeEventRequirements
+    calculatePredictiveExhaustion,
+    generatePeerBenchmarking,
+    processChatQuery
 };

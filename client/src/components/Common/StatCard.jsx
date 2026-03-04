@@ -1,7 +1,7 @@
 import React from 'react';
 import Tooltip from '../Tooltip/Tooltip';
 
-const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, disclaimer }) => {
+const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, disclaimer, onClick, className }) => {
   // Determine trend color
   const getTrendClass = (trendValue) => {
     if (!trendValue) return '';
@@ -12,7 +12,11 @@ const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, di
   const trendDisplay = typeof trend === 'number' ? `${trend > 0 ? '+' : ''}${trend}%` : trend;
 
   return (
-    <div className={`metric-card ${isPending ? 'is-pending' : ''}`}>
+    <div
+      className={`metric-card ${isPending ? 'is-pending' : ''} ${className || ''}`}
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer', height: '100%' } : { height: '100%' }}
+    >
       <div className="metric-icon" style={{ backgroundColor: isPending ? 'var(--warning)' : (color || 'var(--icon-bg-uniform)') }}>
         {icon}
       </div>

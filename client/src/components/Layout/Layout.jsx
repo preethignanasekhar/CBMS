@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import FloatingAIChat from '../AI/FloatingAIChat';
 import './Layout.scss';
 
 const Layout = () => {
@@ -24,6 +25,7 @@ const Layout = () => {
           <Outlet key={location.pathname} />
         </main>
       </div>
+      <FloatingAIChat />
     </div>
   );
 };
