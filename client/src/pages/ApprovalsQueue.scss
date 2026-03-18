@@ -297,13 +297,17 @@
   backdrop-filter: blur(4px);
 }
 
-.modal {
+.approvals-modal {
   background: white;
   border-radius: var(--radius-xl);
-  width: 100%;
-  max-width: 600px;
+  width: 95%;
+  max-width: 1100px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .modal-header {
@@ -316,6 +320,10 @@
 
 .modal-body {
   padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .modal-actions {

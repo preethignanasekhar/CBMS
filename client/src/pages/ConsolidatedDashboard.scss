@@ -3,6 +3,7 @@
 /* Consolidated Dashboard - Premium Glass Theme */
 .consolidated-dashboard-container {
   @extend .page-container;
+  max-width: 1800px !important; // Allow more space for 3 columns
 }
 
 
@@ -31,52 +32,7 @@
   min-width: 200px;
 }
 
-.flexible-year-input {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid #ced4da;
-  border-radius: 8px;
-  padding: 0 0.75rem;
-  min-width: 200px;
-  height: 42px;
-  position: relative;
-
-  .filter-input {
-    border: none;
-    background: transparent;
-    width: 100%;
-    padding: 0.5rem 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    outline: none;
-  }
-
-  .date-picker-helper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    color: var(--primary);
-    cursor: pointer;
-    transition: transform 0.2s;
-
-    &:hover {
-      transform: scale(1.1);
-    }
-
-    .hidden-date-picker {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      cursor: pointer;
-    }
-  }
-}
+/* flexible-year-input is now handled globally */
 
 /* Overview Stats */
 .overview-stats {
@@ -144,7 +100,8 @@
 
 /* Dashboard Grid */
 .dashboard-content {
-  @extend .charts-grid;
+  display: block;
+  width: 100%;
 }
 
 .consolidated-dashboard-container {
@@ -157,24 +114,111 @@
 }
 
 /* Minimalist Department Badges */
-.department-cards {
+.department-cards-large {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 350px;
   gap: 1.5rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 3rem;
   margin-top: 0;
 }
 
-@media (max-width: 1200px) {
-  .department-cards {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+@media (max-width: 1024px) {
+  .department-cards-large {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 768px) {
-  .department-cards {
+@media (max-width: 640px) {
+  .department-cards-large {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 576px) {
+  .department-cards-large {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dept-card-large {
+  background: white;
+  border-radius: 12px;
+  padding: 1.75rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  height: 370px !important; // Match grid row height
+  width: 370px; // Fill grid cell
+  overflow: hidden;
+  box-sizing: border-box;
+
+  &:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.1);
+
+    .dept-icon-box {
+      transform: scale(1.1);
+    }
+  }
+}
+
+.dept-mini-chart {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  padding: 0.5rem;
+  pointer-events: none;
+  width: 100%;
+  height: 100px; // Fixed height for chart area
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dept-icon-box {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+
+  svg {
+    stroke-width: 2;
+  }
+}
+
+.dept-name-large {
+  font-size: 1rem;
+  font-weight: 750;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 4.2rem;
+}
+
+.dept-total-allocated {
+  font-size: 1rem !important;
+  color: #1e293b !important;
+  margin-top: auto;
+  font-weight: 800 !important;
+  padding: 0.5rem 1rem;
+  background: #f8fafc;
+  border-radius: 20px;
+  width: 100%;
 }
 
 .department-card-minimal {

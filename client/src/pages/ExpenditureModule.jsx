@@ -21,11 +21,12 @@ import {
     Eye,
     RotateCcw,
     X,
-    AlertCircle,
     IndianRupee,
-    Sparkles
+    Sparkles,
+    Paperclip,
+    ClipboardList,
+    AlertCircle
 } from 'lucide-react';
-import AIRequirementGenerator from '../components/AI/AIRequirementGenerator';
 import PageHeader from '../components/Common/PageHeader';
 import Tooltip from '../components/Tooltip/Tooltip';
 import './ExpenditureStyles.scss';
@@ -118,7 +119,7 @@ export const Expenditures = () => {
                 title="My Expenditures"
                 subtitle="Track and manage your department's expenditure requests"
             >
-                {['department', 'hod', 'admin', 'office'].includes(user.role) && (
+                {['department', 'coordinator', 'coordinater'].includes(user.role) && (
                     <button className="btn btn-primary" onClick={() => navigate('/submit-expenditure')}>
                         <Plus size={18} /> Create Event Budget
                     </button>
@@ -299,17 +300,58 @@ export const Expenditures = () => {
                                 </div>
 
                                 <div className="detail-item full-width">
-                                    <label>Expense Items ({selectedExpenditure.expenseItems?.length || 0})</label>
-                                    <div className="expense-items-list" style={{ background: '#f8f9fa', padding: '1rem', borderRadius: '8px', marginTop: '0.5rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: '800', color: '#475569', fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                                        <ClipboardList size={18} className="text-primary" /> Expense Items ({selectedExpenditure.expenseItems?.length || 0})
+                                    </label>
+                                    <div className="expense-items-list" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                                         {selectedExpenditure.expenseItems?.map((item, idx) => (
-                                            <div key={idx} style={{ padding: '0.5rem', borderBottom: idx !== selectedExpenditure.expenseItems.length - 1 ? '1px solid #eee' : 'none' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                    <strong>{item.vendorName}</strong>
-                                                    <span style={{ fontWeight: '500' }}>{formatCurrency(item.amount)}</span>
+                                            <div key={idx} style={{ padding: '1.25rem', borderBottom: idx !== selectedExpenditure.expenseItems.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <div>
+                                                        <strong style={{ fontSize: '1rem', color: '#1e293b' }}>{item.vendorName}</strong>
+                                                        <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                                                            Bill: <span style={{ color: '#1e293b', fontWeight: '600' }}>{item.billNumber}</span> | Date: <span style={{ color: '#1e293b', fontWeight: '600' }}>{new Date(item.billDate).toLocaleDateString('en-IN')}</span>
+                                                        </div>
+                                                        {item.description && (
+                                                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px', fontStyle: 'italic' }}>
+                                                                &ldquo;{item.description}&rdquo;
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--primary)' }}>{formatCurrency(item.amount)}</div>
+                                                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: '700' }}>{item.category?.replace('_', ' ')}</span>
+                                                    </div>
                                                 </div>
-                                                <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                                                    Bill: {item.billNumber} | Date: {new Date(item.billDate).toLocaleDateString()}
-                                                </div>
+
+                                                {item.attachments && item.attachments.length > 0 && (
+                                                    <div style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                                        {item.attachments.map((file, fIdx) => (
+                                                            <a 
+                                                                key={fIdx} 
+                                                                href={file.url} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                style={{ 
+                                                                    display: 'inline-flex', 
+                                                                    alignItems: 'center', 
+                                                                    gap: '6px', 
+                                                                    fontSize: '0.75rem', 
+                                                                    background: '#eff6ff', 
+                                                                    color: '#2563eb', 
+                                                                    padding: '6px 12px', 
+                                                                    borderRadius: '8px', 
+                                                                    textDecoration: 'none', 
+                                                                    fontWeight: '600',
+                                                                    border: '1px solid #dbeafe',
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
+                                                            >
+                                                                <Paperclip size={14} /> {file.originalName || `Bill ${fIdx + 1}`}
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -378,7 +420,7 @@ export const SubmitExpenditure = () => {
     const [overspendPolicy, setOverspendPolicy] = useState('disallow');
 
     useEffect(() => {
-        const allowedRoles = ['department', 'hod', 'admin', 'office', 'principal', 'vice_principal', 'coordinator', 'coordinater'];
+        const allowedRoles = ['department', 'coordinator', 'coordinater'];
         if (!user && !localStorage.getItem('user')) {
             // Wait for user to load if not in local storage
             return;
@@ -482,22 +524,11 @@ export const SubmitExpenditure = () => {
     }, [formData.eventDate, formData.departmentId]);
 
     useEffect(() => {
-        if (formData.budgetHeadId) {
-            // Robust matching: handle both string IDs and object IDs from population
-            const allocation = allocations.find(alloc => {
-                const headId = alloc.budgetHead?._id || alloc.budgetHeadId || alloc.budgetHead;
-                return headId?.toString() === formData.budgetHeadId?.toString();
-            });
-
-            if (allocation) {
-                setRemainingBudget(allocation.remainingAmount ?? (allocation.allocatedAmount - allocation.spentAmount));
-            } else {
-                setRemainingBudget(0);
-            }
-        } else {
-            setRemainingBudget(0);
-        }
-    }, [formData.budgetHeadId, allocations]);
+        // Since budget info is now per-item, we should ideally check balances per item.
+        // For the "remainingBudget" summary, we'll keep a map or just check the total against some head if needed.
+        // However, the component relies on 'remainingBudget' for a global check.
+        // We'll calculate a total remaining budget across used heads or just handle it per item in validation.
+    }, [formData.expenseItems, allocations]);
 
     const handleEventChange = (e) => {
         const { name, value } = e.target;
@@ -529,6 +560,7 @@ export const SubmitExpenditure = () => {
         setFormData(prev => ({
             ...prev,
             expenseItems: [...prev.expenseItems, {
+                budgetHeadId: '',
                 category: 'MISCELLANEOUS',
                 billNumber: '',
                 billDate: new Date().toISOString().split('T')[0],
@@ -572,9 +604,8 @@ export const SubmitExpenditure = () => {
         }
 
         if (!formData.eventName.trim()) newErrors.eventName = 'Event name is required.';
-        if (!formData.eventType) newErrors.eventType = 'Event type is required.';
         if (!formData.eventDate) newErrors.eventDate = 'Event date is required.';
-        if (!formData.budgetHeadId) newErrors.budgetHeadId = 'Budget head is required.';
+        if (!formData.budgetHeadId) newErrors.budgetHeadId = 'Budget Head is required.';
 
         if (Object.keys(newErrors).length > 0) {
             console.warn('[Step 1 Validation Failed]', newErrors);
@@ -587,17 +618,26 @@ export const SubmitExpenditure = () => {
     const validateStep2 = () => {
         const newErrors = {};
         formData.expenseItems.forEach((item, idx) => {
-            if (!item.category) newErrors[`item_${idx}_category`] = 'Category required';
             if (!item.vendorName?.trim()) newErrors[`item_${idx}_vendor`] = 'Vendor name required';
             if (!item.amount || parseFloat(item.amount) <= 0) newErrors[`item_${idx}_amount`] = 'Invalid amount';
+            if (!item.category) newErrors[`item_${idx}_category`] = 'Category required';
             if (!item.billNumber?.trim()) newErrors[`item_${idx}_bill`] = 'Bill number required';
             if (!item.billDate) newErrors[`item_${idx}_date`] = 'Bill date required';
-        });
 
-        const total = calculateTotal();
-        if (total > remainingBudget && overspendPolicy === 'disallow') {
-            newErrors.budget = `Total amount (₹${total.toLocaleString()}) exceeds remaining budget (₹${remainingBudget.toLocaleString()})`;
-        }
+            // Event-level budget check
+            if (formData.budgetHeadId && item.amount) {
+                const headId = formData.budgetHeadId.toString();
+                const allocation = allocations.find(a => (a.budgetHead?._id || a.budgetHeadId || a.budgetHead)?.toString() === headId);
+                const avail = allocation ? (allocation.remainingAmount ?? (allocation.allocatedAmount - allocation.spentAmount)) : 0;
+                
+                // Calculate total spent on this head across ALL items so far
+                const totalForThisHead = formData.expenseItems.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
+
+                if (totalForThisHead > avail && overspendPolicy === 'disallow') {
+                    newErrors[`item_${idx}_amount`] = `Total exceeds available budget (₹${avail.toLocaleString()})`;
+                }
+            }
+        });
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -621,20 +661,7 @@ export const SubmitExpenditure = () => {
         window.scrollTo(0, 0);
     };
 
-    const handleAIRequirements = (data) => {
-        // Pre-fill form details if they are empty
-        if (data.eventName && !formData.eventName) {
-            setFormData(prev => ({ ...prev, eventName: data.eventName }));
-        }
 
-        if (data.selectedItems && data.selectedItems.length > 0) {
-            const checklistText = `\nAI Suggested Requirements:\n- ${data.selectedItems.join('\n- ')}`;
-            setFormData(prev => ({
-                ...prev,
-                description: (prev.description || '') + checklistText
-            }));
-        }
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -645,7 +672,7 @@ export const SubmitExpenditure = () => {
             submissionData.append('department', formData.departmentId);
             submissionData.append('budgetHead', formData.budgetHeadId);
             submissionData.append('eventName', formData.eventName);
-            submissionData.append('eventType', formData.eventType);
+            submissionData.append('eventType', formData.expenseItems[0]?.category || 'MISCELLANEOUS');
             submissionData.append('eventDate', formData.eventDate);
             submissionData.append('description', formData.description);
 
@@ -656,6 +683,7 @@ export const SubmitExpenditure = () => {
             // Here we'll send a structured JSON for items metadata and then the files.
 
             const expenseItems = formData.expenseItems.map((item, idx) => ({
+                budgetHead: formData.budgetHeadId,
                 category: item.category || 'MISCELLANEOUS',
                 billNumber: item.billNumber,
                 billDate: item.billDate || new Date().toISOString().split('T')[0],
@@ -687,261 +715,252 @@ export const SubmitExpenditure = () => {
     const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
     return (
-        <div className="submit-expenditure-page-container">
+        <div className="submit-expenditure-container">
             <PageHeader
                 title="Create Event Budget"
                 subtitle="Submit an event-based expenditure request for approval"
             />
 
-            <div className="submit-expenditure-layout">
-                <div className="form-column">
-                    <div className="stepper">
-                        <div className={`step-item ${step >= 1 ? 'active' : ''}`}>1. Event Info</div>
-                        <div className={`step-item ${step >= 2 ? 'active' : ''}`}>2. Expense Items</div>
-                        <div className={`step-item ${step >= 3 ? 'active' : ''}`}>3. Final Preview</div>
-                    </div>
+            <div className="expenditure-form-container card-standard">
+                <div className="stepper">
+                    <div className={`step-item ${step >= 1 ? 'active' : ''}`}>1. Event Info</div>
+                    <div className={`step-item ${step >= 2 ? 'active' : ''}`}>2. Expense Items</div>
+                    <div className={`step-item ${step >= 3 ? 'active' : ''}`}>3. Final Preview</div>
+                </div>
 
-                    <div className="expenditure-form-container card-standard">
-                        {!user ? (
-                            <div className="loading py-5 text-center">Loading your profile...</div>
-                        ) : (
-                            <>
-                                {errors.submit && <div className="alert alert-danger mb-4">{errors.submit}</div>}
-
-                                {step === 1 && (
-                                    <div className="form-step">
-                                        {errors.departmentId && !['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
-                                            <div className="alert alert-danger mb-4">
-                                                <AlertCircle size={18} /> {errors.departmentId}
-                                            </div>
-                                        )}
-                                        {['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
-                                            <div className="form-group mb-4">
-                                                <label>Department *</label>
-                                                <select
-                                                    name="departmentId"
-                                                    value={formData.departmentId}
-                                                    onChange={handleEventChange}
-                                                    className={errors.departmentId ? 'error' : ''}
-                                                >
-                                                    <option value="">Select Department</option>
-                                                    {departments.map(dept => (
-                                                        <option key={dept._id} value={dept._id}>{dept.name}</option>
-                                                    ))}
-                                                </select>
-                                                {errors.departmentId && <span className="form-error">{errors.departmentId}</span>}
-                                            </div>
-                                        )}
-                                        <div className="form-row">
-                                            <div className="form-group">
-                                                <label>Event Name *</label>
-                                                <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} placeholder="e.g. Annual Tech Symposium" className={errors.eventName ? 'error' : ''} />
-                                                {errors.eventName && <span className="form-error">{errors.eventName}</span>}
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Event Category *</label>
-                                                <select name="eventType" value={formData.eventType} onChange={handleEventChange} className={errors.eventType ? 'error' : ''}>
-                                                    <option value="">Select Category</option>
-                                                    {categories.map(c => (
-                                                        <option key={c._id} value={c.name}>{c.name}</option>
-                                                    ))}
-                                                    <option value="Other">Other</option>
-                                                </select>
-                                                {errors.eventType && <span className="form-error">{errors.eventType}</span>}
-                                            </div>
-                                        </div>
-                                        <div className="form-row">
-                                            <div className="form-group">
-                                                <label>Event Date *</label>
-                                                <input type="date" name="eventDate" value={formData.eventDate} onChange={handleEventChange} className={errors.eventDate ? 'error' : ''} />
-                                                {errors.eventDate && <span className="form-error">{errors.eventDate}</span>}
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Budget Head *</label>
-                                                <select name="budgetHeadId" value={formData.budgetHeadId} onChange={handleEventChange} className={errors.budgetHeadId ? 'error' : ''}>
-                                                    <option value="">Select Budget Head</option>
-                                                    {budgetHeads.length === 0 && <option disabled>No budget heads available</option>}
-                                                    {budgetHeads.map(head => (
-                                                        <option key={head._id} value={head._id}>
-                                                            {head.name} ({head.category})
-                                                        </option>
-                                                    ))}
-                                                </select>{errors.budgetHeadId && <span className="form-error">{errors.budgetHeadId}</span>}
-                                                {formData.budgetHeadId && (
-                                                    <span className={`form-help ${remainingBudget === 0 ? 'text-danger' : 'text-success'}`} style={{ fontWeight: remainingBudget === 0 ? 'bold' : 'normal' }}>
-                                                        {remainingBudget === 0
-                                                            ? `No allocation found for this head in ${(() => {
-                                                                const d = formData.eventDate ? new Date(formData.eventDate) : new Date();
-                                                                const y = d.getFullYear();
-                                                                const m = d.getMonth() + 1;
-                                                                return m >= 4 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
-                                                            })()}`
-                                                            : `Available Balance: ${formatCurrency(remainingBudget)}`}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="form-group">
-                                            <label>General Description</label>
-                                            <textarea name="description" value={formData.description} onChange={handleEventChange} rows="3" placeholder="Brief about the event..."></textarea>
-                                        </div>
-                                        <div className="form-actions" style={{ justifyContent: 'flex-end' }}>
-                                            <button type="button" className="btn btn-primary" onClick={nextStep}>
-                                                Next: Add Items <ChevronRight size={16} />
-                                            </button>
-                                        </div>
+                {!user ? (
+                    <div className="loading py-5 text-center">Loading your profile...</div>
+                ) : (
+                    <>
+                        {errors.submit && <div className="alert alert-danger mb-4">{errors.submit}</div>}
+                        {/* Step content here - no changes to inner logic */}
+                        {step === 1 && (
+                            /* ... Step 1 content ... */
+                            <div className="form-step">
+                                {errors.departmentId && !['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
+                                    <div className="alert alert-danger mb-4">
+                                        <AlertCircle size={18} /> {errors.departmentId}
                                     </div>
                                 )}
-
-                                {step === 2 && (
-                                    <div className="form-step">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                            <h3>Expense Items</h3>
-                                            <button type="button" className="btn btn-outline btn-sm" onClick={addItem}><Plus size={16} /> Add Item</button>
-                                        </div>
-
-                                        {errors.budget && <div className="alert alert-danger mb-3">{errors.budget}</div>}
-
-                                        <div className="items-scroll-area" style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '1rem' }}>
-                                            {(!formData.expenseItems || formData.expenseItems.length === 0) && (
-                                                <div className="text-center py-5 text-muted">
-                                                    No items added yet. Click "Add Item" to start.
-                                                </div>
-                                            )}
-                                            {formData.expenseItems && formData.expenseItems.map((item, idx) => (
-                                                <div key={idx} className="expense-item-card mb-4" style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px', background: '#fdfdfd', position: 'relative' }}>
-                                                    {formData.expenseItems.length > 1 && (
-                                                        <button type="button" className="remove-item-btn" onClick={() => removeItem(idx)} style={{ position: 'absolute', top: '10px', right: '10px', color: '#dc3545', border: 'none', background: 'none', cursor: 'pointer' }}>
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    )}
-                                                    <h5 className="mb-3">Item #{idx + 1}</h5>
-                                                    <div className="form-row">
-                                                        <div className="form-group">
-                                                            <label>Expense Category *</label>
-                                                            <select name="category" value={item.category} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_category`] ? 'error' : ''}>
-                                                                <option value="">Select Category</option>
-                                                                <option value="EVENT_DECORATION">Decoration</option>
-                                                                <option value="REFRESHMENTS">Catering</option>
-                                                                <option value="PRINTING">Printing</option>
-                                                                <option value="EQUIPMENT">Equipment</option>
-                                                                <option value="MISCELLANEOUS">Miscellaneous</option>
-                                                                {categories.length > 0 && <option disabled>──────────</option>}
-                                                                {categories.map(c => (
-                                                                    <option key={c._id} value={c.name}>{c.name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="form-group">
-                                                            <label>Vendor Name *</label>
-                                                            <input type="text" name="vendorName" value={item.vendorName} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_vendor`] ? 'error' : ''} />
-                                                        </div>
-                                                    </div>
-                                                    <div className="form-row">
-                                                        <div className="form-group">
-                                                            <label>Amount (₹) *</label>
-                                                            <input type="number" name="amount" value={item.amount} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_amount`] ? 'error' : ''} />
-                                                        </div>
-                                                        <div className="form-group">
-                                                            <label>Bill Number *</label>
-                                                            <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
-                                                        </div>
-                                                    </div>
-                                                    <div className="form-row">
-                                                        <div className="form-group">
-                                                            <label>Bill Date *</label>
-                                                            <input type="date" name="billDate" value={item.billDate} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_date`] ? 'error' : ''} />
-                                                        </div>
-                                                        <div className="form-group">
-                                                            <label>Description</label>
-                                                            <input type="text" name="description" value={item.description} onChange={(e) => handleItemChange(idx, e)} placeholder="What was this for?" />
-                                                        </div>
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label>Attach Bills</label>
-                                                        <input type="file" multiple onChange={(e) => handleFileChange(idx, e)} accept="image/*,.pdf" />
-                                                        <p className="form-help mt-1" style={{ fontSize: '0.75rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <AlertCircle size={12} /> Supporting documents must be clear and legible. PDF or Images only.
-                                                        </p>
-                                                        <div className="mt-2" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                            {item.attachments.map((file, fIdx) => (
-                                                                <span key={fIdx} style={{ background: '#eee', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                    {file.name} <X size={12} onClick={() => removeItemFile(idx, fIdx)} style={{ cursor: 'pointer' }} />
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                {['admin', 'office', 'principal', 'vice_principal'].includes(user?.role) && (
+                                    <div className="form-group mb-4">
+                                        <label>Department *</label>
+                                        <select
+                                            name="departmentId"
+                                            value={formData.departmentId}
+                                            onChange={handleEventChange}
+                                            className={errors.departmentId ? 'error' : ''}
+                                        >
+                                            <option value="">Select Department</option>
+                                            {departments.map(dept => (
+                                                <option key={dept._id} value={dept._id}>{dept.name}</option>
                                             ))}
-                                        </div>
-
-                                        <div className="form-summary mt-4" style={{ borderTop: '2px solid #eee', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div className="total-preview">
-                                                <strong>Total Event Budget: </strong>
-                                                <span className={`text-xl font-bold ${calculateTotal() > remainingBudget ? 'text-danger' : 'text-primary'}`}>
-                                                    {formatCurrency(calculateTotal())}
-                                                </span>
-                                            </div>
-                                            <div className="form-actions">
-                                                <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Back</button>
-                                                <button className="btn btn-primary" onClick={nextStep}>Preview & Submit <ChevronRight size={16} /></button>
-                                            </div>
-                                        </div>
+                                        </select>
+                                        {errors.departmentId && <span className="form-error">{errors.departmentId}</span>}
                                     </div>
                                 )}
-
-                                {step === 3 && (
-                                    <div className="form-step">
-                                        <h3>Summary Review</h3>
-                                        <div className="summary-card" style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '10px', marginTop: '1rem' }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                <div><strong>Event:</strong> {formData.eventName}</div>
-                                                <div><strong>Category:</strong> {formData.eventType}</div>
-                                                <div><strong>Date:</strong> {formData.eventDate}</div>
-                                                <div><strong>Budget Head:</strong> {budgetHeads.find(h => h._id === formData.budgetHeadId)?.name}</div>
-                                            </div>
-                                            <hr className="my-3" />
-                                            <div><strong>Expense Items:</strong> {formData.expenseItems.length} items</div>
-                                            <div className="mt-3">
-                                                {formData.expenseItems.map((item, idx) => (
-                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px dashed #eee', pb: '4px' }}>
-                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                            <span style={{ fontWeight: 'bold' }}>{item.vendorName}</span>
-                                                            <span style={{ fontSize: '0.75rem', color: '#666' }}>{item.category} | {item.billNumber} | {item.billDate}</span>
-                                                        </div>
-                                                        <span style={{ fontWeight: 'bold' }}>{formatCurrency(item.amount)}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <hr className="my-3" />
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span className="text-lg font-bold">Total Request:</span>
-                                                <span className="text-xl font-bold text-primary">{formatCurrency(calculateTotal())}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="alert alert-info mt-4" style={{ fontSize: '0.85rem' }}>
-                                            <AlertCircle size={16} /> Budget will be deducted **only after Office Sanction**. This request will now move to HOD for verification.
-                                        </div>
-
-                                        <div className="form-actions mt-4" style={{ justifyContent: 'space-between' }}>
-                                            <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Edit Details</button>
-                                            <button className="btn btn-primary" onClick={handleSubmit} disabled={isSubmitting}>
-                                                {isSubmitting ? 'Submitting...' : 'Confirm & Submit Event'} <Send size={16} className="ml-2" />
-                                            </button>
-                                        </div>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label>Event Name *</label>
+                                        <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} placeholder="e.g. Annual Tech Symposium" className={errors.eventName ? 'error' : ''} />
+                                        {errors.eventName && <span className="form-error">{errors.eventName}</span>}
                                     </div>
-                                )}
-                            </>
+                                </div>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label>Event Date *</label>
+                                        <input type="date" name="eventDate" value={formData.eventDate} onChange={handleEventChange} className={errors.eventDate ? 'error' : ''} />
+                                        {errors.eventDate && <span className="form-error">{errors.eventDate}</span>}
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Budget Head *</label>
+                                        <select 
+                                            name="budgetHeadId" 
+                                            value={formData.budgetHeadId} 
+                                            onChange={handleEventChange} 
+                                            className={errors.budgetHeadId ? 'error' : ''}
+                                        >
+                                            <option value="">Select Budget Head</option>
+                                            {budgetHeads.map(head => (
+                                                <option key={head._id} value={head._id}>{head.name}</option>
+                                            ))}
+                                        </select>
+                                        {formData.budgetHeadId && (
+                                            <div className="form-help text-info" style={{ fontSize: '0.75rem', marginTop: '4px', fontWeight: '600' }}>
+                                                {(() => {
+                                                    const alloc = allocations.find(a => (a.budgetHead?._id || a.budgetHeadId || a.budgetHead)?.toString() === formData.budgetHeadId.toString());
+                                                    const balance = alloc ? (alloc.remainingAmount ?? (alloc.allocatedAmount - alloc.spentAmount)) : 0;
+                                                    return `Available Balance: ${formatCurrency(balance)}`;
+                                                })()}
+                                            </div>
+                                        )}
+                                        {errors.budgetHeadId && <span className="form-error">{errors.budgetHeadId}</span>}
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label>General Description</label>
+                                    <textarea name="description" value={formData.description} onChange={handleEventChange} rows="3" placeholder="Brief about the event..."></textarea>
+                                </div>
+                                <div className="form-actions" style={{ justifyContent: 'flex-end' }}>
+                                    <button type="button" className="btn btn-primary" onClick={nextStep}>
+                                        Next: Add Items <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                            </div>
                         )}
-                    </div>
-                </div>
 
-                <div className="ai-planner-column">
-                    <div className="ai-planner-sticky">
-                        <AIRequirementGenerator onRequirementsGenerated={handleAIRequirements} />
-                    </div>
-                </div>
+                        {step === 2 && (
+                            <div className="form-step">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h3>Expense Items</h3>
+                                    <button type="button" className="btn btn-outline btn-sm" onClick={addItem}><Plus size={16} /> Add Item</button>
+                                </div>
+
+                                {errors.budget && <div className="alert alert-danger mb-3">{errors.budget}</div>}
+
+                                <div className="items-scroll-area" style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '1rem' }}>
+                                    {(!formData.expenseItems || formData.expenseItems.length === 0) && (
+                                        <div className="text-center py-5 text-muted">
+                                            No items added yet. Click "Add Item" to start.
+                                        </div>
+                                    )}
+                                    {formData.expenseItems && formData.expenseItems.map((item, idx) => (
+                                        <div key={idx} className="expense-item-card mb-4" style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px', background: '#fdfdfd', position: 'relative' }}>
+                                            {formData.expenseItems.length > 1 && (
+                                                <button type="button" className="remove-item-btn" onClick={() => removeItem(idx)} style={{ position: 'absolute', top: '10px', right: '10px', color: '#dc3545', border: 'none', background: 'none', cursor: 'pointer' }}>
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                            <h5 className="mb-3">Item #{idx + 1}</h5>
+                                             <div className="form-row">
+                                                <div className="form-group">
+                                                    <label>Event Category *</label>
+                                                    <select 
+                                                        name="category" 
+                                                        value={item.category} 
+                                                        onChange={(e) => handleItemChange(idx, e)}
+                                                        className={errors[`item_${idx}_category`] ? 'error' : ''}
+                                                    >
+                                                        <option value="">Select Category</option>
+                                                        {categories.map(cat => (
+                                                            <option key={cat._id} value={cat.name}>{cat.name}</option>
+                                                        ))}
+                                                        <option value="MISCELLANEOUS">Miscellaneous</option>
+                                                    </select>
+                                                    {errors[`item_${idx}_category`] && <span className="form-error">{errors[`item_${idx}_category`]}</span>}
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Vendor Name *</label>
+                                                    <input type="text" name="vendorName" value={item.vendorName} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_vendor`] ? 'error' : ''} />
+                                                    {errors[`item_${idx}_vendor`] && <span className="form-error">{errors[`item_${idx}_vendor`]}</span>}
+                                                </div>
+                                            </div>
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label>Amount (₹) *</label>
+                                                    <input type="number" name="amount" value={item.amount} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_amount`] ? 'error' : ''} />
+                                                    {errors[`item_${idx}_amount`] && <span className="form-error">{errors[`item_${idx}_amount`]}</span>}
+                                                </div>
+                                            </div>
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label>Bill Number *</label>
+                                                    <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
+                                                    {errors[`item_${idx}_bill`] && <span className="form-error">{errors[`item_${idx}_bill`]}</span>}
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Bill Date *</label>
+                                                    <input type="date" name="billDate" value={item.billDate} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_date`] ? 'error' : ''} />
+                                                    {errors[`item_${idx}_date`] && <span className="form-error">{errors[`item_${idx}_date`]}</span>}
+                                                </div>
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Description</label>
+                                                <input type="text" name="description" value={item.description} onChange={(e) => handleItemChange(idx, e)} placeholder="What was this for?" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Attach Bills</label>
+                                                <input type="file" multiple onChange={(e) => handleFileChange(idx, e)} accept="image/*,.pdf" />
+                                                <p className="form-help mt-1" style={{ fontSize: '0.75rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <AlertCircle size={12} /> Supporting documents must be clear and legible. PDF or Images only.
+                                                </p>
+                                                <div className="mt-2" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                    {item.attachments.map((file, fIdx) => (
+                                                        <span key={fIdx} style={{ background: '#eee', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            {file.name} <X size={12} onClick={() => removeItemFile(idx, fIdx)} style={{ cursor: 'pointer' }} />
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="form-summary mt-4" style={{ borderTop: '2px solid #eee', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div className="total-preview">
+                                        <strong>Total Event Budget: </strong>
+                                        <span className="text-xl font-bold text-primary">
+                                            {formatCurrency(calculateTotal())}
+                                        </span>
+                                    </div>
+                                    <div className="form-actions">
+                                        <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Back</button>
+                                        <button className="btn btn-primary" onClick={nextStep}>Preview & Submit <ChevronRight size={16} /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 3 && (
+                            <div className="form-step">
+                                <h3>Summary Review</h3>
+                                <div className="summary-card" style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '10px', marginTop: '1rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                        <div><strong>Event:</strong> {formData.eventName}</div>
+                                        <div><strong>Budget Head:</strong> {budgetHeads.find(h => h._id === formData.budgetHeadId)?.name || 'N/A'}</div>
+                                        <div><strong>Date:</strong> {formData.eventDate}</div>
+                                    </div>
+                                    <hr className="my-3" />
+                                    <div><strong>Expense Items:</strong> {formData.expenseItems.length} items</div>
+                                    <div className="mt-3">
+                                        {formData.expenseItems.map((item, idx) => (
+                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px dashed #eee', pb: '4px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontWeight: 'bold' }}>{item.vendorName}</span>
+                                                    <span style={{ fontSize: '0.75rem', color: '#666' }}>
+                                                        {item.category} | {item.billNumber}
+                                                    </span>
+                                                </div>
+                                                <span style={{ fontWeight: 'bold' }}>{formatCurrency(item.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <hr className="my-3" />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span className="text-lg font-bold">Total Request:</span>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div className="text-xl font-bold text-primary">{formatCurrency(calculateTotal())}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold' }}>
+                                                {formData.expenseItems.length} items | {formData.expenseItems.reduce((acc, i) => acc + (i.attachments?.length || 0), 0)} documents
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="alert alert-info mt-4" style={{ fontSize: '0.85rem' }}>
+                                    <AlertCircle size={16} /> Budget will be deducted **only after Office Sanction**. This request will now move to HOD for verification.
+                                </div>
+
+                                <div className="form-actions mt-4" style={{ justifyContent: 'space-between' }}>
+                                    <button className="btn btn-secondary" onClick={prevStep}><ChevronLeft size={16} /> Edit Details</button>
+                                    <button className="btn btn-primary" onClick={handleSubmit} disabled={isSubmitting}>
+                                        {isSubmitting ? 'Submitting...' : 'Confirm & Submit Event'} <Send size={16} className="ml-2" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );
@@ -957,13 +976,14 @@ export const ResubmitExpenditure = () => {
     const [error, setError] = useState(null);
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
-        budgetHeadId: '',
         eventName: '',
         eventType: '',
         eventDate: '',
+        budgetHeadId: '',
         description: '',
         expenseItems: []
     });
+    const [allocations, setAllocations] = useState([]);
 
     const [budgetHeads, setBudgetHeads] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -984,10 +1004,10 @@ export const ResubmitExpenditure = () => {
                 const exp = expRes.data.data.expenditure;
                 setCategories(catsRes.data.data.categories.filter(c => c.isActive));
                 setFormData({
-                    budgetHeadId: exp.budgetHead?._id || exp.budgetHead,
                     eventName: exp.eventName,
                     eventType: exp.eventType,
                     eventDate: exp.eventDate ? new Date(exp.eventDate).toISOString().split('T')[0] : '',
+                    budgetHeadId: exp.budgetHead?._id || exp.budgetHead || (exp.expenseItems?.[0]?.budgetHead?._id || exp.expenseItems?.[0]?.budgetHead) || '',
                     description: exp.description || '',
                     expenseItems: exp.expenseItems?.map(item => ({
                         ...item,
@@ -999,17 +1019,16 @@ export const ResubmitExpenditure = () => {
                 setBudgetHeads(headsRes.data.data.budgetHeads);
                 setOverspendPolicy(settingsRes.data.data.budget_overspend_policy || 'disallow');
 
-                // Fetch allocation for remaining budget
-                const year = getCurrentFinancialYear();
-                const allocRes = await allocationAPI.getAllocations({
-                    financialYear: year,
-                    department: user.department?._id || user.department,
-                    budgetHead: exp.budgetHead?._id || exp.budgetHead
-                });
-
-                if (allocRes.data.data.allocations.length > 0) {
-                    const alloc = allocRes.data.data.allocations[0];
-                    setRemainingBudget(alloc.allocatedAmount - alloc.spentAmount);
+                // Fetch all allocations for department
+                const deptId = user.department?._id || user.department;
+                if (deptId) {
+                    const year = getCurrentFinancialYear();
+                    const allocRes = await allocationAPI.getAllocations({
+                        financialYear: year,
+                        department: deptId,
+                        limit: 1000
+                    });
+                    setAllocations(allocRes.data.data.allocations || []);
                 }
 
             } catch (err) {
@@ -1057,6 +1076,19 @@ export const ResubmitExpenditure = () => {
         }));
     };
 
+    const handleFileChange = (index, e) => {
+        const files = Array.from(e.target.files);
+        const updatedItems = [...formData.expenseItems];
+        updatedItems[index].attachments = [...(updatedItems[index].attachments || []), ...files];
+        setFormData(prev => ({ ...prev, expenseItems: updatedItems }));
+    };
+
+    const removeItemFile = (itemIndex, fileIndex) => {
+        const updatedItems = [...formData.expenseItems];
+        updatedItems[itemIndex].attachments = updatedItems[itemIndex].attachments?.filter((_, i) => i !== fileIndex);
+        setFormData(prev => ({ ...prev, expenseItems: updatedItems }));
+    };
+
     const removeItem = (index) => {
         if (formData.expenseItems.length > 1) {
             setFormData(prev => ({
@@ -1071,8 +1103,8 @@ export const ResubmitExpenditure = () => {
     const validateStep1 = () => {
         const errs = {};
         if (!formData.eventName) errs.eventName = 'Required';
-        if (!formData.eventType) errs.eventType = 'Required';
         if (!formData.eventDate) errs.eventDate = 'Required';
+        if (!formData.budgetHeadId) errs.budgetHeadId = 'Required';
         setErrors(errs);
         return Object.keys(errs).length === 0;
     };
@@ -1080,16 +1112,25 @@ export const ResubmitExpenditure = () => {
     const validateStep2 = () => {
         const errs = {};
         formData.expenseItems.forEach((item, idx) => {
-            if (!item.category) errs[`item_${idx}_category`] = 'Required';
             if (!item.vendorName) errs[`item_${idx}_vendor`] = 'Required';
             if (!item.amount || item.amount <= 0) errs[`item_${idx}_amount`] = 'Required';
+            if (!item.category) errs[`item_${idx}_category`] = 'Required';
             if (!item.billNumber) errs[`item_${idx}_bill`] = 'Required';
             if (!item.billDate) errs[`item_${idx}_date`] = 'Required';
+ 
+            // Per-item budget check (total comparison)
+            if (formData.budgetHeadId && item.amount) {
+                const headId = formData.budgetHeadId.toString();
+                const allocation = allocations.find(a => (a.budgetHead?._id || a.budgetHeadId || a.budgetHead)?.toString() === headId);
+                const avail = allocation ? (allocation.remainingAmount ?? (allocation.allocatedAmount - allocation.spentAmount)) : 0;
+                
+                const totalReq = formData.expenseItems.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
+
+                if (totalReq > avail && overspendPolicy === 'disallow') {
+                    errs[`item_${idx}_amount`] = `Exceeds budget (₹${avail.toLocaleString()})`;
+                }
+            }
         });
-        const total = calculateTotal();
-        if (total > remainingBudget && overspendPolicy === 'disallow') {
-            errs.budget = 'Exceeds remaining budget';
-        }
         setErrors(errs);
         return Object.keys(errs).length === 0;
     };
@@ -1100,12 +1141,13 @@ export const ResubmitExpenditure = () => {
         try {
             const submissionData = new FormData();
             submissionData.append('eventName', formData.eventName);
-            submissionData.append('eventType', formData.eventType);
+            submissionData.append('eventType', formData.expenseItems[0]?.category || 'MISCELLANEOUS');
             submissionData.append('eventDate', formData.eventDate);
-            submissionData.append('description', formData.description);
             submissionData.append('budgetHead', formData.budgetHeadId);
+            submissionData.append('description', formData.description);
 
             const expenseItems = formData.expenseItems.map(item => ({
+                budgetHead: formData.budgetHeadId,
                 category: item.category || 'MISCELLANEOUS',
                 vendorName: item.vendorName,
                 amount: item.amount,
@@ -1154,16 +1196,38 @@ export const ResubmitExpenditure = () => {
                             <div className="form-group">
                                 <label>Event Name *</label>
                                 <input type="text" name="eventName" value={formData.eventName} onChange={handleEventChange} className={errors.eventName ? 'error' : ''} />
+                                {errors.eventName && <span className="text-danger text-xs">{errors.eventName}</span>}
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>Budget Head *</label>
+                                <select 
+                                    name="budgetHeadId" 
+                                    value={formData.budgetHeadId} 
+                                    onChange={handleEventChange} 
+                                    className={errors.budgetHeadId ? 'error' : ''}
+                                >
+                                    <option value="">Select Budget Head</option>
+                                    {budgetHeads.map(head => (
+                                        <option key={head._id} value={head._id}>{head.name}</option>
+                                    ))}
+                                </select>
+                                {formData.budgetHeadId && (
+                                    <div className="text-info font-semibold" style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                                        {(() => {
+                                            const alloc = allocations.find(a => (a.budgetHead?._id || a.budgetHeadId || a.budgetHead)?.toString() === formData.budgetHeadId?.toString());
+                                            const balance = alloc ? (alloc.allocatedAmount - alloc.spentAmount) : 0;
+                                            return `Available Balance: ${formatCurrency(balance)}`;
+                                        })()}
+                                    </div>
+                                )}
+                                {errors.budgetHeadId && <span className="text-danger text-xs">{errors.budgetHeadId}</span>}
                             </div>
                             <div className="form-group">
-                                <label>Event Category *</label>
-                                <select name="eventType" value={formData.eventType} onChange={handleEventChange} className={errors.eventType ? 'error' : ''}>
-                                    <option value="">Select Category</option>
-                                    {categories.map(c => (
-                                        <option key={c._id} value={c.name}>{c.name}</option>
-                                    ))}
-                                    <option value="Other">Other</option>
-                                </select>
+                                <label>Event Date *</label>
+                                <input type="date" name="eventDate" value={formData.eventDate} onChange={handleEventChange} className={errors.eventDate ? 'error' : ''} />
+                                {errors.eventDate && <span className="text-danger text-xs">{errors.eventDate}</span>}
                             </div>
                         </div>
                         <div className="form-actions" style={{ justifyContent: 'flex-end' }}>
@@ -1182,44 +1246,65 @@ export const ResubmitExpenditure = () => {
                         <div className="items-scroll" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                             {formData.expenseItems.map((item, idx) => (
                                 <div key={idx} className="mb-4 p-3 border rounded">
-                                    <div className="form-row">
+                                     <div className="form-row">
                                         <div className="form-group">
-                                            <label>Category</label>
-                                            <select name="category" value={item.category} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_category`] ? 'error' : ''}>
+                                            <label>Event Category *</label>
+                                            <select 
+                                                name="category" 
+                                                value={item.category} 
+                                                onChange={(e) => handleItemChange(idx, e)}
+                                                className={errors[`item_${idx}_category`] ? 'error' : ''}
+                                            >
                                                 <option value="">Select Category</option>
-                                                <option value="EVENT_DECORATION">Decoration</option>
-                                                <option value="REFRESHMENTS">Catering</option>
-                                                <option value="PRINTING">Printing</option>
-                                                <option value="EQUIPMENT">Equipment</option>
-                                                <option value="MISCELLANEOUS">Miscellaneous</option>
-                                                {categories.length > 0 && <option disabled>──────────</option>}
-                                                {categories.map(c => (
-                                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                                {categories.map(cat => (
+                                                    <option key={cat._id} value={cat.name}>{cat.name}</option>
                                                 ))}
+                                                <option value="MISCELLANEOUS">Miscellaneous</option>
                                             </select>
+                                            {errors[`item_${idx}_category`] && <span className="text-danger text-xs">{errors[`item_${idx}_category`]}</span>}
                                         </div>
                                         <div className="form-group">
-                                            <label>Vendor</label>
+                                            <label>Vendor *</label>
                                             <input type="text" name="vendorName" value={item.vendorName} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_vendor`] ? 'error' : ''} />
+                                            {errors[`item_${idx}_vendor`] && <span className="text-danger text-xs">{errors[`item_${idx}_vendor`]}</span>}
                                         </div>
                                     </div>
                                     <div className="form-row">
                                         <div className="form-group">
-                                            <label>Amount</label>
+                                            <label>Amount *</label>
                                             <input type="number" name="amount" value={item.amount} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_amount`] ? 'error' : ''} />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Bill Number</label>
-                                            <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
+                                            {errors[`item_${idx}_amount`] && <span className="text-danger text-xs">{errors[`item_${idx}_amount`]}</span>}
                                         </div>
                                     </div>
                                     <div className="form-row">
                                         <div className="form-group">
-                                            <label>Bill Date</label>
+                                            <label>Bill Number *</label>
+                                            <input type="text" name="billNumber" value={item.billNumber} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_bill`] ? 'error' : ''} />
+                                            {errors[`item_${idx}_bill`] && <span className="text-danger text-xs">{errors[`item_${idx}_bill`]}</span>}
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Bill Date *</label>
                                             <input type="date" name="billDate" value={item.billDate} onChange={(e) => handleItemChange(idx, e)} className={errors[`item_${idx}_date`] ? 'error' : ''} />
+                                            {errors[`item_${idx}_date`] && <span className="text-danger text-xs">{errors[`item_${idx}_date`]}</span>}
                                         </div>
                                     </div>
-                                    <button className="btn btn-link text-danger p-0" onClick={() => removeItem(idx)}>Remove Item</button>
+                                    <div className="form-group mt-3">
+                                        <label>Attachments (Add New Bills)</label>
+                                        <input type="file" multiple onChange={(e) => handleFileChange(idx, e)} accept="image/*,.pdf" className="form-control-file" />
+                                        <div className="mt-2" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                            {item.attachments?.map((file, fIdx) => (
+                                                <span key={fIdx} style={{ background: '#eee', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    {file.name} <X size={12} onClick={() => removeItemFile(idx, fIdx)} style={{ cursor: 'pointer' }} />
+                                                </span>
+                                            ))}
+                                            {item.fileCount > 0 && item.attachments?.length === 0 && (
+                                                <span style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>
+                                                    {item.fileCount} existing files attached
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className="btn btn-link text-danger p-0 mt-2" onClick={() => removeItem(idx)}>Remove Item</button>
                                 </div>
                             ))}
                         </div>
@@ -1235,8 +1320,12 @@ export const ResubmitExpenditure = () => {
                         <h3>Confirm Resubmission</h3>
                         <div className="p-4 bg-light rounded mt-3">
                             <div><strong>Event:</strong> {formData.eventName}</div>
-                            <div><strong>Category:</strong> {formData.eventType}</div>
+                            <div><strong>Budget Head:</strong> {budgetHeads.find(h => h._id === formData.budgetHeadId)?.name || 'N/A'}</div>
                             <div><strong>Total Amount:</strong> {formatCurrency(calculateTotal())}</div>
+                            <div className="mt-2 text-sm text-gray-600">
+                                <strong>Documents:</strong> {formData.expenseItems.reduce((acc, item) => acc + (item.attachments?.length || 0), 0)} new files selected
+                                {formData.expenseItems.some(i => i.fileCount > 0) && " + original files"}
+                            </div>
                         </div>
                         <div className="form-actions mt-4">
                             <button className="btn btn-secondary" onClick={() => setStep(2)}>Back</button>

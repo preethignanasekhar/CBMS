@@ -3,7 +3,6 @@ const Department = require('../models/Department');
 const BudgetHead = require('../models/BudgetHead');
 const Allocation = require('../models/Allocation');
 const AllocationHistory = require('../models/AllocationHistory');
-const AuditLog = require('../models/AuditLog');
 const { recordAuditLog } = require('../utils/auditService');
 const { notifyProposalSubmission, notifyProposalStatusChange } = require('../utils/notificationService');
 
@@ -47,7 +46,8 @@ const getBudgetProposals = async (req, res) => {
       }
     }
 
-    console.log(`[Debug] getBudgetProposals - Final Query:`, query);
+    console.log(`[GET] /api/budget-proposals - User: ${req.user?._id} (${req.user?.role})`);
+    console.log(`[Debug] getBudgetProposals - Final Query:`, JSON.stringify(query, null, 2));
 
     const skip = (page - 1) * limit;
 
@@ -59,9 +59,12 @@ const getBudgetProposals = async (req, res) => {
         .populate('approvedBy', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit))
+        .lean(),
       BudgetProposal.countDocuments(query)
     ]);
+
+    console.log(`[Debug] getBudgetProposals - Found ${proposals.length} proposals. Total: ${total}`);
 
     res.status(200).json({
       success: true,
@@ -76,6 +79,7 @@ const getBudgetProposals = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('[API Error] getBudgetProposals:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching budget proposals',
@@ -156,10 +160,54 @@ const createBudgetProposal = async (req, res) => {
   try {
     const { financialYear, proposalItems, notes } = req.body;
 
-    // Allow multiple proposals per department per year so they can request additional heads later.
-    // Removed strict single-proposal restriction here.
-
     const status = req.body.status || 'draft';
+
+    // Only check for duplicates if the status is 'submitted'
+    // Actually, the user says "If a budget proposal for a specific Budget head is already Submitted or Approved..."
+    // So we should check if they are TRYING to submit/create something that conflicts with an ALREADY submitted/approved one.
+    
+    const activeStatuses = ['submitted', 'verified_by_hod', 'verified_by_principal', 'verified', 'approved'];
+
+    // Find all existing "active" proposals for this department and FY
+    const existingProposals = await BudgetProposal.find({
+      department: req.user.department,
+      financialYear,
+      status: { $in: activeStatuses }
+    });
+
+    const existingBudgetHeadIds = new Set();
+    existingProposals.forEach(p => {
+      p.proposalItems.forEach(item => {
+        existingBudgetHeadIds.add(item.budgetHead.toString());
+      });
+    });
+
+    // Also check for duplicates within the current submission items themselves
+    const currentBudgetHeadIds = new Set();
+
+    for (const item of proposalItems) {
+      const bhId = item.budgetHead.toString();
+      
+      if (currentBudgetHeadIds.has(bhId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Duplicate Budget Heads found within the same proposal.'
+        });
+      }
+      currentBudgetHeadIds.add(bhId);
+
+      if (status !== 'draft' && existingBudgetHeadIds.has(bhId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more Budget Heads have already been proposed for this financial year.'
+        });
+      }
+    }
+
+    console.log(`[Proposal] Creating proposal for FY ${financialYear}. Items count: ${proposalItems?.length || 0}`);
+    if (proposalItems?.[0]?.monthlyBreakdown) {
+      console.log('[Proposal] Sample Breakdown (Item 1):', JSON.stringify(proposalItems[0].monthlyBreakdown));
+    }
     const proposal = await BudgetProposal.create({
       financialYear,
       department: req.user.department,
@@ -168,7 +216,16 @@ const createBudgetProposal = async (req, res) => {
       submittedBy: req.user._id,
       lastModifiedBy: req.user._id,
       status: status,
-      ...(status === 'submitted' ? { submittedDate: new Date() } : {})
+      ...(status === 'submitted' ? { 
+        submittedDate: new Date(),
+        approvalSteps: [{
+          approver: req.user._id,
+          role: req.user.role,
+          decision: 'submit',
+          remarks: 'Initial Submission',
+          timestamp: new Date()
+        }]
+      } : {})
     });
 
     await recordAuditLog({
@@ -184,6 +241,7 @@ const createBudgetProposal = async (req, res) => {
       data: proposal
     });
   } catch (error) {
+    console.error('[API Error] createBudgetProposal:', error);
     res.status(500).json({
       success: false,
       message: 'Error creating budget proposal',
@@ -207,8 +265,8 @@ const updateBudgetProposal = async (req, res) => {
       });
     }
 
-    // Allow updating drafts, revised, or even submitted/approved (which resets them)
-    const editableStatuses = ['draft', 'revised', 'submitted', 'verified_by_hod', 'verified_by_principal', 'approved'];
+    // Allow updating drafts, revised, rejected, or even submitted/approved (which resets them)
+    const editableStatuses = ['draft', 'revised', 'submitted', 'verified_by_hod', 'verified_by_principal', 'approved', 'rejected'];
     if (!editableStatuses.includes(proposal.status)) {
       return res.status(400).json({
         success: false,
@@ -221,18 +279,77 @@ const updateBudgetProposal = async (req, res) => {
       (['verified_by_principal', 'approved'].includes(proposal.status) && !['principal', 'vice_principal', 'office', 'admin'].includes(req.user.role));
 
     if (isResetRequired) {
+      const oldStatus = proposal.status;
       proposal.status = 'submitted';
       proposal.submittedDate = new Date();
-      // Reset approval steps and read list for fresh cycle
-      proposal.approvalSteps = [];
-      proposal.readBy = [];
+      
+      // Record the re-submission attempt instead of clearing
+      proposal.approvalSteps.push({
+        approver: req.user._id,
+        role: req.user.role,
+        decision: 'resubmit',
+        remarks: `Proposal edited and resubmitted from ${oldStatus.replace(/_/g, ' ')} status`,
+        timestamp: new Date()
+      });
+      
+      proposal.readBy = [req.user._id]; 
     }
-
-    proposal.proposalItems = proposalItems || proposal.proposalItems;
+    
     proposal.notes = notes !== undefined ? notes : proposal.notes;
     proposal.lastModifiedBy = req.user._id;
 
+    if (proposalItems) {
+      const activeStatuses = ['submitted', 'verified_by_hod', 'verified_by_principal', 'verified', 'approved'];
+
+      // Find all OTHER active proposals for this department and FY
+      const existingProposals = await BudgetProposal.find({
+        _id: { $ne: req.params.id },
+        department: proposal.department,
+        financialYear: proposal.financialYear,
+        status: { $in: activeStatuses }
+      });
+
+      const existingBudgetHeadIds = new Set();
+      existingProposals.forEach(p => {
+        p.proposalItems.forEach(item => {
+          existingBudgetHeadIds.add(item.budgetHead.toString());
+        });
+      });
+
+      // Also check for duplicates within the current submission items themselves
+      const currentBudgetHeadIds = new Set();
+
+      for (const item of proposalItems) {
+        const bhId = item.budgetHead.toString();
+        
+        if (currentBudgetHeadIds.has(bhId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Duplicate Budget Heads found within the same proposal.'
+          });
+        }
+        currentBudgetHeadIds.add(bhId);
+
+        if (status !== 'draft' && existingBudgetHeadIds.has(bhId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'One or more Budget Heads have already been proposed for this financial year.'
+          });
+        }
+      }
+
+      proposal.proposalItems = proposalItems;
+    }
+
+    console.log(`[Proposal] Updating proposal ${req.params.id}. Items count: ${proposalItems?.length || 0}`);
+    if (proposalItems?.[0]?.monthlyBreakdown) {
+      console.log('[Proposal] Update Breakdown (Item 1):', JSON.stringify(proposalItems[0].monthlyBreakdown));
+    }
+    // Explicitly mark proposalItems as modified for Mongoose to track deep changes
+    proposal.markModified('proposalItems');
+
     await proposal.save();
+    console.log('[Proposal] Save completed. Total Amount:', proposal.totalProposedAmount);
 
     await recordAuditLog({
       eventType: 'budget_proposal_updated',
@@ -246,6 +363,7 @@ const updateBudgetProposal = async (req, res) => {
       data: proposal
     });
   } catch (error) {
+    console.error('[API Error] updateBudgetProposal:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating budget proposal',
@@ -278,9 +396,16 @@ const submitBudgetProposal = async (req, res) => {
     proposal.submittedDate = new Date();
     proposal.lastModifiedBy = req.user._id;
 
-    // Reset approval steps and read list for fresh cycle
-    proposal.approvalSteps = [];
-    proposal.readBy = [];
+    // Record submission step instead of clearing
+    proposal.approvalSteps.push({
+      approver: req.user._id,
+      role: req.user.role,
+      decision: 'resubmit',
+      remarks: 'Revised and resubmitted for approval',
+      timestamp: new Date()
+    });
+    
+    proposal.readBy = [req.user._id];
 
     await proposal.save();
 
@@ -794,7 +919,8 @@ const resubmitBudgetProposal = async (req, res) => {
         budgetHead: item.budgetHead,
         proposedAmount: item.proposedAmount,
         justification: item.justification,
-        previousYearUtilization: item.previousYearUtilization
+        previousYearUtilization: item.previousYearUtilization,
+        monthlyBreakdown: item.monthlyBreakdown
       })),
       notes: `Resubmission of rejected proposal ${id}. ${originalProposal.notes || ''} `,
       status: 'draft',

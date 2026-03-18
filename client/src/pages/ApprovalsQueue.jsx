@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { expenditureAPI, budgetProposalAPI, aiAPI, allocationAPI } from '../services/api';
 import Tooltip from '../components/Tooltip/Tooltip';
-import { Check, X, Search, FileText, DollarSign, ClipboardList, Sparkles, ArrowUpDown, Filter } from 'lucide-react';
+import { 
+  Check, X, Search, FileText, DollarSign, ClipboardList, Sparkles, 
+  ArrowUpDown, Filter, Calendar, Paperclip, TrendingUp, IndianRupee 
+} from 'lucide-react';
 import Button from '../components/Common/Button';
 import PageHeader from '../components/Common/PageHeader';
 import StatusBadge from '../components/Common/StatusBadge';
@@ -22,6 +25,7 @@ const ApprovalsQueue = () => {
   const [previousYearStats, setPreviousYearStats] = useState({});
 
   const fetchApprovals = async () => {
+    if (!user) return;
     try {
       setLoading(true);
       const getPropStatus = () => {
@@ -33,26 +37,33 @@ const ApprovalsQueue = () => {
       };
 
       const propParams = { ...filters };
+      const expParams = { ...filters };
+
       if (filters.status === 'pending_approval') {
         if (['principal', 'vice_principal'].includes(user.role)) {
-          // Principals only see items that have been verified by HOD
           propParams.status = 'verified_by_hod,verified';
-          filters.status = 'verified'; // For expenditures
+          expParams.status = 'verified';
         } else if (['office', 'admin'].includes(user.role)) {
-          // Office only sees items that have been verified by Principal / Management
           propParams.status = 'verified_by_principal';
-          filters.status = 'approved'; // For expenditures
+          expParams.status = 'approved';
         } else if (user.role === 'hod') {
           // HODs only see new submissions that need their verification
           propParams.status = 'submitted,revised';
-          filters.status = 'pending'; // For expenditures too
+          expParams.status = 'pending';
+          
+          // CRITICAL: HODs must be filtered by their department
+          const deptId = user.department?._id || user.department;
+          if (deptId) {
+            propParams.department = deptId;
+            expParams.departmentId = deptId;
+          }
         }
       } else {
         propParams.status = getPropStatus();
       }
 
       const [expRes, propRes] = await Promise.all([
-        expenditureAPI.getExpenditures(filters),
+        expenditureAPI.getExpenditures(expParams),
         budgetProposalAPI.getBudgetProposals(propParams)
       ]);
       const expenditures = (expRes.data?.data?.expenditures || []).map(item => ({
@@ -88,11 +99,71 @@ const ApprovalsQueue = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
   };
 
-  const handleAction = (item, type) => {
-    setSelectedItem(item);
+  const handleAction = async (item, type) => {
+    if (item.itemType === 'proposal') {
+      try {
+        const response = await budgetProposalAPI.getBudgetProposalById(item._id);
+        const proposal = response?.data?.data || item;
+        setSelectedItem(proposal);
+
+        // Fetch Previous Year Stats for context "the box containing everything"
+        try {
+          const currentFY = proposal.financialYear;
+          const [startYear, endYear] = currentFY.split('-').map(Number);
+          if (!isNaN(startYear) && !isNaN(endYear)) {
+            const prevFY = `${startYear - 1}-${endYear - 1}`;
+            const deptId = proposal.department?._id || proposal.department;
+            if (deptId) {
+              const [allocRes] = await Promise.all([
+                allocationAPI.getAllocations({ financialYear: prevFY, department: deptId })
+              ]);
+              if (allocRes.data.success) {
+                const statsMap = {};
+                allocRes.data.data.allocations.forEach(alloc => {
+                  const bhId = alloc.budgetHead?._id || alloc.budgetHead;
+                  statsMap[bhId] = {
+                    allocated: alloc.allocatedAmount,
+                    spent: alloc.spentAmount || 0,
+                  };
+                });
+                setPreviousYearStats(statsMap);
+              }
+            }
+          }
+        } catch (sErr) {
+          console.error('Failed to fetch historical stats for verification:', sErr);
+        }
+      } catch (err) {
+        console.error('Failed to fetch full proposal detail:', err);
+        setSelectedItem(item);
+      }
+    } else {
+      setSelectedItem(item);
+    }
     setActionType(type);
     setRemarks('');
     setShowModal(true);
+  };
+
+  const calculateMonthlyTotals = (items) => {
+    const totals = { 
+        apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0, oct: 0, nov: 0, dec: 0, jan: 0, feb: 0, mar: 0 
+    };
+    if (!items) return totals;
+    
+    items.forEach(item => {
+        if (item.monthlyBreakdown) {
+            Object.keys(totals).forEach(month => {
+                totals[month] += (item.monthlyBreakdown[month] || 0);
+            });
+        }
+    });
+    return totals;
+  };
+
+  const getProposalMonthlySum = (proposal) => {
+    const totals = calculateMonthlyTotals(proposal.proposalItems);
+    return Object.values(totals).reduce((sum, val) => sum + val, 0);
   };
 
   const processAction = async () => {
@@ -201,7 +272,20 @@ const ApprovalsQueue = () => {
                     <td className="reference-cell">
                       <div className="reference-info">
                         <span className="reference-text text-gray-900 font-bold">{item.reference}</span>
-                        {item.department?.name && <span className="dept-tag text-gray-500">{item.department.name}</span>}
+                        <div className="text-xs text-gray-500">
+                          {item.itemType === 'expenditure' ? (
+                            <>
+                              {item.eventType} | <span className="text-primary font-medium">{item.budgetHead?.name || 'Loading BH...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              Annual Budget {item.financialYear} | {item.proposalItems?.length || 0} Items
+                            </>
+                          )}
+                        </div>
+                        {item.department?.name && user.role !== 'hod' && (
+                          <span className="dept-tag text-gray-500">{item.department.name}</span>
+                        )}
                       </div>
                     </td>
                     <td className="amount-cell">
@@ -312,135 +396,303 @@ const ApprovalsQueue = () => {
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="approvals-modal">
             <div className="modal-header">
               <h3>
-                {actionType === 'verify' && `Verify & Accept ${selectedItem?.itemType === 'expenditure' ? 'Expenditure' : 'Budget Proposal'}`}
+                {actionType === 'verify' && `Verify & Accept ${selectedItem?.itemType === 'expenditure' ? 'Expenditure' : 'Budget Proposal'} in principle`}
                 {actionType === 'approve' && `${user.role === 'office' ? 'Allocate & Approve' : 'Approve'} ${selectedItem?.itemType === 'expenditure' ? 'Expenditure' : 'Budget Proposal'}`}
                 {actionType === 'reject' && `Reject ${selectedItem?.itemType === 'expenditure' ? 'Expenditure' : 'Budget Proposal'}`}
               </h3>
               <button onClick={() => setShowModal(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
-              <p>Are you sure you want to {actionType} <strong>{selectedItem?.reference}</strong>?</p>
 
-              {/* Detailed Item Information */}
-              {selectedItem && (
-                <div className="item-details" style={{ margin: '1rem 0', padding: '1rem', border: '1px solid #dee2e6', borderRadius: '4px', background: '#fff' }}>
-                  <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#212529', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Details</h4>
+                {/* Detailed Item Information */}
+                {selectedItem && (
+                  <div className="item-details" style={{ 
+                    margin: '1rem 0', 
+                    padding: '1.25rem', 
+                    border: '1px solid #e2e8f0', 
+                    borderRadius: '16px', 
+                    background: '#fff', 
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden'
+                  }}>
+                    <h4 style={{ marginTop: 0, marginBottom: '1.25rem', color: '#1e293b', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.15rem' }}>
+                      <FileText size={18} className="text-primary" />
+                      Detailed Information
+                    </h4>
 
-                  {selectedItem.itemType === 'expenditure' ? (
-                    <div className="expenditure-details">
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' }}>
-                        <div><span style={{ color: '#6c757d' }}>Event Name:</span> <strong>{selectedItem.eventName}</strong></div>
-                        <div><span style={{ color: '#6c757d' }}>Event Type:</span> <strong>{selectedItem.eventType}</strong></div>
-                        <div><span style={{ color: '#6c757d' }}>Budget Head:</span> <strong className="text-info">{selectedItem.budgetHead?.name || 'N/A'}</strong></div>
-                        <div><span style={{ color: '#6c757d' }}>Event Date:</span> <strong>{selectedItem.eventDate ? new Date(selectedItem.eventDate).toLocaleDateString() : 'N/A'}</strong></div>
-                        <div><span style={{ color: '#6c757d' }}>Total Amount:</span> <strong className="text-primary">{formatCurrency(selectedItem.totalAmount)}</strong></div>
-                      </div>
+                    {selectedItem.itemType === 'expenditure' ? (
+                      <div className="expenditure-details" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: '#f8fafc', padding: '1rem', borderRadius: '12px' }}>
+                          <div className="detail-field">
+                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>Event Name</span>
+                            <strong style={{ color: '#0f172a' }}>{selectedItem.eventName}</strong>
+                          </div>
+                          <div className="detail-field">
+                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>Type</span>
+                            <strong style={{ color: '#0f172a' }}>{selectedItem.eventType}</strong>
+                          </div>
+                          <div className="detail-field">
+                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>Budget Head</span>
+                            <strong className="text-info" style={{ color: '#0284c7' }}>{selectedItem.budgetHead?.name || 'N/A'}</strong>
+                          </div>
+                          <div className="detail-field">
+                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>Event Date</span>
+                            <strong style={{ color: '#0f172a' }}>{selectedItem.eventDate ? new Date(selectedItem.eventDate).toLocaleDateString() : 'N/A'}</strong>
+                          </div>
+                          <div className="detail-field">
+                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>Total Amount</span>
+                            <strong className="text-primary text-xl" style={{ color: 'var(--primary)', fontSize: '1.25rem' }}>{formatCurrency(selectedItem.totalAmount)}</strong>
+                          </div>
+                        </div>
 
-                      <div className="items-list-preview" style={{ marginTop: '1rem' }}>
-                        <h5 style={{ marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>Expense Items</h5>
-                        <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ background: '#f8f9fa', textAlign: 'left' }}>
-                              <th style={{ padding: '4px' }}>Vendor</th>
-                              <th style={{ padding: '4px' }}>Bill #</th>
-                              <th style={{ padding: '4px', textAlign: 'right' }}>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedItem.expenseItems?.map((item, idx) => (
-                              <tr key={idx}>
-                                <td style={{ padding: '4px', borderBottom: '1px solid #f8f9fa' }}>{item.vendorName}</td>
-                                <td style={{ padding: '4px', borderBottom: '1px solid #f8f9fa' }}>{item.billNumber}</td>
-                                <td style={{ padding: '4px', borderBottom: '1px solid #f8f9fa', textAlign: 'right' }}>{formatCurrency(item.amount)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <div className="items-list-preview" style={{ marginTop: '0.25rem' }}>
+                          <h5 style={{ marginBottom: '0.75rem', color: '#334155', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700' }}>
+                            <ClipboardList size={18} className="text-primary" /> Itemized Expenses
+                          </h5>
+                          <div className="overflow-x-auto rounded-lg border border-slate-100">
+                            <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                                  <th style={{ padding: '8px 12px', color: '#64748b' }}>Vendor / Description</th>
+                                  <th style={{ padding: '8px 12px', color: '#64748b' }}>Bill Info</th>
+                                  <th style={{ padding: '8px 12px', color: '#64748b', textAlign: 'right' }}>Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedItem.expenseItems?.map((item, idx) => (
+                                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '16px 20px' }}>
+                                      <div className="font-bold text-slate-800" style={{ fontSize: '0.95rem' }}>{item.vendorName}</div>
+                                      <div className="text-xs text-slate-500 mt-1.5">{item.description}</div>
+                                    </td>
+                                    <td style={{ padding: '16px 20px' }}>
+                                      <div className="text-slate-700 font-bold">{item.billNumber}</div>
+                                      <div className="text-xs text-slate-400 mt-1">{item.billDate ? new Date(item.billDate).toLocaleDateString() : ''}</div>
+                                    </td>
+                                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                                      <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '1rem' }}>{formatCurrency(item.amount)}</div>
+                                      {item.attachments && item.attachments.length > 0 && (
+                                        <div style={{ marginTop: '6px', display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                          {item.attachments.map((file, fIdx) => (
+                                            <a 
+                                              key={fIdx} 
+                                              href={file.url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              style={{ 
+                                                fontSize: '0.65rem', 
+                                                background: '#f1f5f9', 
+                                                color: '#475569', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '4px',
+                                                textDecoration: 'none',
+                                                border: '1px solid #e2e8f0',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                fontWeight: '600'
+                                              }}
+                                            >
+                                              <Paperclip size={10} /> Bill {fIdx + 1}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="proposal-details">
-                      <div style={{ marginBottom: '10px' }}>
-                        <span style={{ color: '#6c757d' }}>Department:</span> <strong>{selectedItem.department?.name || selectedItem.department}</strong>
-                      </div>
-                      <div className="proposal-items-list">
-                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ background: '#f8f9fa', textAlign: 'left' }}>
-                              <th style={{ padding: '6px', borderBottom: '1px solid #dee2e6' }}>Budget Head</th>
-                              <th style={{ padding: '6px', borderBottom: '1px solid #dee2e6', textAlign: 'right' }}>Prev Alloc</th>
-                              <th style={{ padding: '6px', borderBottom: '1px solid #dee2e6', textAlign: 'right' }}>Prev Spent</th>
-                              <th style={{ padding: '6px', borderBottom: '1px solid #dee2e6', textAlign: 'right' }}>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedItem.proposalItems?.map((pItem, idx) => {
-                              const bhId = pItem.budgetHead?._id || pItem.budgetHead;
-                              const stats = previousYearStats[bhId] || {};
-                              return (
-                                <tr key={idx}>
-                                  <td style={{ padding: '6px', borderBottom: '1px solid #eee' }}>
-                                    {pItem.budgetHeadName || pItem.budgetHead?.name || 'N/A'}
-                                    {pItem.justification && <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>{pItem.justification}</div>}
-                                  </td>
-                                  <td style={{ padding: '6px', borderBottom: '1px solid #eee', textAlign: 'right', color: '#6c757d' }}>
-                                    {stats.allocated ? formatCurrency(stats.allocated) : '-'}
-                                  </td>
-                                  <td style={{ padding: '6px', borderBottom: '1px solid #eee', textAlign: 'right', color: '#6c757d' }}>
-                                    {stats.allocated ? formatCurrency(stats.spent || 0) : '-'}
-                                  </td>
-                                  <td style={{ padding: '6px', borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>
-                                    {formatCurrency(pItem.proposedAmount)}
+                    ) : (
+                      <div className="proposal-details" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', background: '#f8fafc', padding: '1.125rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <span style={{ color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: '800', display: 'block', marginBottom: '6px' }}>Department</span>
+                            <strong style={{ color: '#0f172a', fontSize: '1.1rem', wordBreak: 'break-word' }}>{selectedItem.department?.name || selectedItem.department}</strong>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <span style={{ color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: '800', display: 'block', marginBottom: '6px' }}>Financial Year</span>
+                            <strong style={{ color: '#0f172a', fontSize: '1.1rem' }}>{selectedItem.financialYear}</strong>
+                          </div>
+                        </div>
+                        
+                        <div className="proposal-items-list" style={{ width: '100%', overflow: 'hidden' }}>
+                          <h5 style={{ marginBottom: '1rem', color: '#1e293b', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '700' }}>
+                            <ClipboardList size={20} className="text-primary" /> Budget Head Breakdown
+                          </h5>
+                          <div className="overflow-x-auto rounded-lg border border-slate-100">
+                            <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
+                                  <th style={{ padding: '8px 16px', color: '#475569', borderBottom: '2px solid #e2e8f0', fontWeight: '800' }}>Budget Head</th>
+                                  <th style={{ padding: '8px 16px', color: '#475569', borderBottom: '2px solid #e2e8f0', textAlign: 'right', fontWeight: '800' }}>Prev Alloc</th>
+                                  <th style={{ padding: '8px 16px', color: '#475569', borderBottom: '2px solid #e2e8f0', textAlign: 'right', fontWeight: '800' }}>Prev Spent</th>
+                                  <th style={{ padding: '8px 16px', color: '#475569', borderBottom: '2px solid #e2e8f0', textAlign: 'right', fontWeight: '800' }}>Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedItem.proposalItems?.map((pItem, idx) => {
+                                  const bhId = pItem.budgetHead?._id || pItem.budgetHead;
+                                  const stats = previousYearStats[bhId] || {};
+                                  return (
+                                    <React.Fragment key={idx}>
+                                      <tr style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                        <td style={{ padding: '12px 16px', borderBottom: pItem.monthlyBreakdown ? 'none' : '1px solid #f1f5f9' }}>
+                                          <div className="font-bold text-slate-800" style={{ fontSize: '0.95rem' }}>{pItem.budgetHeadName || pItem.budgetHead?.name || 'N/A'}</div>
+                                          {pItem.justification && <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', marginTop: '4px' }}>{pItem.justification}</div>}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', borderBottom: pItem.monthlyBreakdown ? 'none' : '1px solid #f1f5f9', textAlign: 'right', color: '#475569', fontWeight: '600' }}>
+                                          {stats.allocated ? formatCurrency(stats.allocated) : '₹0'}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', borderBottom: pItem.monthlyBreakdown ? 'none' : '1px solid #f1f5f9', textAlign: 'right', color: '#475569', fontWeight: '600' }}>
+                                          {stats.allocated ? formatCurrency(stats.spent || 0) : '₹0'}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', borderBottom: pItem.monthlyBreakdown ? 'none' : '1px solid #f1f5f9', textAlign: 'right', fontWeight: '800', color: 'var(--primary)', fontSize: '1rem' }}>
+                                          {formatCurrency(pItem.proposedAmount)}
+                                        </td>
+                                      </tr>
+                                      {pItem.monthlyBreakdown && (
+                                        <tr>
+                                          <td colSpan="4" style={{ padding: '0 20px 24px 20px', borderBottom: '1px solid #e2e8f0', boxSizing: 'border-box' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <Calendar size={14} className="text-primary" /> Monthly Expenditure Plan
+                                            </div>
+                                            <div style={{ 
+                                              display: 'grid', 
+                                              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                                              gap: '16px', 
+                                              fontSize: '0.8rem',
+                                              background: '#f8fafc',
+                                              padding: '1.5rem',
+                                              borderRadius: '12px',
+                                              border: '1px solid #e2e8f0',
+                                              boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.05)',
+                                              boxSizing: 'border-box'
+                                            }}>
+                                              {['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar'].map(m => (
+                                                <div key={m} style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.6rem' }}>{m}</span>
+                                                  <span style={{ color: '#334155', fontWeight: '700' }}>{formatCurrency(pItem.monthlyBreakdown?.[m] || 0)}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                              {/* Monthly Totals Summary Section */}
+                              <tfoot style={{ borderTop: '2px solid #e2e8f0' }}>
+                                <tr style={{ background: '#f0f4f8' }}>
+                                  <td colSpan="4" style={{ padding: '16px' }}>
+                                    <div style={{ 
+                                        fontSize: '0.9rem', 
+                                        fontWeight: '800', 
+                                        color: '#1e293b', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '10px',
+                                        marginBottom: '1rem' 
+                                    }}>
+                                      <TrendingUp size={18} className="text-primary" /> Consolidated Monthly Expenditure Totals (Sum Data)
+                                    </div>
+                                    <div style={{ 
+                                      display: 'grid', 
+                                      gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                                      gap: '12px',
+                                      background: '#fff',
+                                      padding: '1.25rem',
+                                      borderRadius: '10px',
+                                      border: '1px solid #cbd5e1'
+                                    }}>
+                                      {Object.entries(calculateMonthlyTotals(selectedItem.proposalItems)).map(([month, total]) => (
+                                        <div key={month} style={{ display: 'flex', flexDirection: 'column', borderLeft: '3px solid var(--primary)', paddingLeft: '8px' }}>
+                                          <span style={{ color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.65rem' }}>{month} SUM</span>
+                                          <span style={{ color: '#0f172a', fontWeight: '800', fontSize: '0.9rem' }}>{formatCurrency(total)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </td>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr>
-                              <td style={{ padding: '6px', fontWeight: 'bold' }}>Total</td>
-                              <td colSpan="2"></td>
-                              <td style={{ padding: '6px', fontWeight: 'bold', textAlign: 'right' }}>{formatCurrency(selectedItem.totalProposedAmount || selectedItem.amount)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                      {selectedItem.notes && (
-                        <div style={{ marginTop: '10px' }}>
-                          <span style={{ color: '#6c757d' }}>Proposal Notes:</span>
-                          <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem' }}>{selectedItem.notes}</p>
+                                <tr style={{ background: '#f8fafc', fontWeight: '800' }}>
+                                  <td style={{ padding: '12px 16px', color: '#1e293b', fontSize: '0.95rem' }}>Grand Total Proposed</td>
+                                  <td colSpan="2"></td>
+                                  <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontSize: '1.25rem' }}>{formatCurrency(selectedItem.totalProposedAmount || selectedItem.amount)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                        {selectedItem.notes && (
+                          <div style={{ marginTop: '1.5rem', background: '#fefce8', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #facc15' }}>
+                            <span style={{ color: '#854d0e', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Proposal Notes</span>
+                            <p style={{ margin: 0, fontSize: '0.9rem', color: '#713f12', whiteSpace: 'pre-wrap' }}>{selectedItem.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               {selectedItem?.approvalSteps?.length > 0 && (
                 <div className="approval-history" style={{ margin: '1rem 0', padding: '0.75rem', background: '#f8f9fa', borderRadius: '4px', fontSize: '0.85rem' }}>
                   <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#495057' }}>Activity History:</strong>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#6c757d' }}></span>
-                      <span style={{ color: '#6c757d' }}>Submitted</span>
-                      <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>
-                        {new Date(selectedItem.submittedAt || selectedItem.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {selectedItem.approvalSteps.map((step, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: step.decision === 'reject' ? '#dc3545' : '#28a745' }}></span>
-                        <span>
-                          <strong>{step.decision === 'verify' ? 'Verified' : step.decision === 'approve' ? 'Approved' : step.decision}</strong>
-                          <span style={{ color: '#6c757d', marginLeft: '4px' }}>by {step.role?.toUpperCase()}</span>
-                        </span>
-                        <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>({new Date(step.timestamp).toLocaleDateString()})</span>
-                        {step.remarks && <span style={{ fontStyle: 'italic', color: '#6c757d' }}>- "{step.remarks}"</span>}
-                      </div>
-                    ))}
+                    {(() => {
+                      const steps = selectedItem.approvalSteps || [];
+                      const lastSubmitIndex = [...steps].reverse().findIndex(s => s.decision === 'submit' || s.decision === 'resubmit');
+                      const startIndex = lastSubmitIndex === -1 ? 0 : steps.length - 1 - lastSubmitIndex;
+                      
+                      const currentCycleSteps = steps.slice(startIndex);
+                      const hasSubmissionInSteps = currentCycleSteps.some(s => s.decision === 'submit' || s.decision === 'resubmit');
+
+                      return (
+                        <>
+                          {!hasSubmissionInSteps && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#6c757d' }}></span>
+                              <span style={{ color: '#6c757d' }}>Submitted</span>
+                              <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>
+                                {new Date(selectedItem.submittedAt || selectedItem.createdAt).toLocaleDateString()}
+                                </span>
+                            </div>
+                          )}
+                          {currentCycleSteps.map((step, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ 
+                                width: '6px', 
+                                height: '6px', 
+                                borderRadius: '50%', 
+                                background: step.decision === 'reject' ? '#dc3545' : 
+                                           (['submit', 'resubmit'].includes(step.decision)) ? '#1c7ed6' : '#28a745' 
+                              }}></span>
+                              <span>
+                                <strong>
+                                  {step.decision === 'verify' ? 'Verified' : 
+                                   step.decision === 'approve' ? 'Approved' : 
+                                   step.decision === 'submit' ? 'Submitted' :
+                                   step.decision === 'resubmit' ? 'Edited & Submitted' : 
+                                   step.decision}
+                                </strong>
+                                <span style={{ color: '#6c757d', marginLeft: '4px' }}>by {step.role?.toUpperCase()}</span>
+                              </span>
+                              <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>({new Date(step.timestamp).toLocaleDateString()})</span>
+                              {step.remarks && <span style={{ fontStyle: 'italic', color: '#6c757d' }}>- "{step.remarks}"</span>}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

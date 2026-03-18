@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const expenseItemSchema = new mongoose.Schema({
+  budgetHead: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BudgetHead',
+    required: [true, 'Budget head is required for each item']
+  },
   category: {
     type: String,
     required: true,
@@ -79,7 +84,7 @@ const expenditureSchema = new mongoose.Schema({
   budgetHead: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BudgetHead',
-    required: [true, 'Budget head is required']
+    // Not required anymore at top level as it's in items
   },
   eventName: {
     type: String,

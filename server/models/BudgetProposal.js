@@ -1,5 +1,47 @@
 const mongoose = require('mongoose');
 
+const monthlyBreakdownSchema = new mongoose.Schema({
+  apr: { type: Number, default: 0 },
+  may: { type: Number, default: 0 },
+  jun: { type: Number, default: 0 },
+  jul: { type: Number, default: 0 },
+  aug: { type: Number, default: 0 },
+  sep: { type: Number, default: 0 },
+  oct: { type: Number, default: 0 },
+  nov: { type: Number, default: 0 },
+  dec: { type: Number, default: 0 },
+  jan: { type: Number, default: 0 },
+  feb: { type: Number, default: 0 },
+  mar: { type: Number, default: 0 }
+}, { _id: false });
+
+const proposalItemSchema = new mongoose.Schema({
+  budgetHead: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BudgetHead',
+    required: [true, 'Budget head is required']
+  },
+  proposedAmount: {
+    type: Number,
+    required: [true, 'Proposed amount is required'],
+    min: [0, 'Proposed amount cannot be negative']
+  },
+  justification: {
+    type: String,
+    required: [true, 'Justification is required'],
+    trim: true
+  },
+  previousYearUtilization: {
+    type: Number,
+    default: 0,
+    min: [0, 'Previous year utilization cannot be negative']
+  },
+  monthlyBreakdown: {
+    type: monthlyBreakdownSchema,
+    default: () => ({})
+  }
+}, { _id: true }); // subdocuments have _id by default, but let's be explicit
+
 const budgetProposalSchema = new mongoose.Schema({
   financialYear: {
     type: String,
@@ -11,28 +53,7 @@ const budgetProposalSchema = new mongoose.Schema({
     ref: 'Department',
     required: [true, 'Department is required']
   },
-  proposalItems: [{
-    budgetHead: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'BudgetHead',
-      required: [true, 'Budget head is required']
-    },
-    proposedAmount: {
-      type: Number,
-      required: [true, 'Proposed amount is required'],
-      min: [0, 'Proposed amount cannot be negative']
-    },
-    justification: {
-      type: String,
-      required: [true, 'Justification is required'],
-      trim: true
-    },
-    previousYearUtilization: {
-      type: Number,
-      default: 0,
-      min: [0, 'Previous year utilization cannot be negative']
-    }
-  }],
+  proposalItems: [proposalItemSchema],
   totalProposedAmount: {
     type: Number,
     default: 0

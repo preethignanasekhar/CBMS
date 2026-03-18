@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportAPI, departmentsAPI, budgetHeadsAPI, usersAPI, financialYearAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { Receipt, IndianRupee, PieChart, Download, FileText, Calendar, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import PageHeader from '../components/Common/PageHeader';
@@ -24,6 +25,16 @@ const Reports = () => {
   const [budgetHeads, setBudgetHeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [financialYears, setFinancialYears] = useState([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user && ['department', 'hod'].includes(user.role)) {
+      setFilters(prev => ({
+        ...prev,
+        departmentId: user.department?._id || user.department
+      }));
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchMasterData();
@@ -105,6 +116,7 @@ const Reports = () => {
           throw new Error('Invalid report type');
       }
 
+      setReportData(response.data.data);
       // Always download as CSV
       downloadAsCSV(response.data.data);
     } catch (err) {
@@ -129,15 +141,16 @@ const Reports = () => {
             'Event Name': exp.eventName,
             'Event Type': exp.eventType,
             'Event Date': formatDate(exp.eventDate),
+            'Total Amount': item.amount,
             'Bill Number': item.billNumber,
             'Bill Date': item.billDate ? formatDate(item.billDate) : 'N/A',
-            'Amount': item.amount,
             'Vendor': item.vendorName || 'N/A',
             'Department': exp.department?.name || 'N/A',
-            'Budget Head': exp.budgetHead?.name || 'N/A',
+            'Budget Head': (item.budgetHead?.name || exp.budgetHead?.name) || 'N/A',
             'Status': exp.status,
             'Financial Year': exp.financialYear,
             'Submitted By': exp.submittedBy?.name || 'N/A',
+            'Created At': exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
           });
         });
       });
@@ -485,6 +498,7 @@ const Reports = () => {
     );
   };
 
+
   return (
     <div className="reports-container">
       <PageHeader
@@ -543,6 +557,26 @@ const Reports = () => {
 
 
             {reportType === 'expenditures' && (
+              <div className="filter-group">
+                <label htmlFor="status">Status</label>
+                <select
+                  id="status"
+                  name="status"
+                  value={filters.status}
+                  onChange={handleFilterChange}
+                  className="filter-select"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="approved">Approved</option>
+                  <option value="finalized">Finalized</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            )}
+
+            {reportType === 'expenditures' && (
               <>
                 <div className="filter-group">
                   <label htmlFor="startDate">Start Date</label>
@@ -577,8 +611,9 @@ const Reports = () => {
                 value={filters.departmentId}
                 onChange={handleFilterChange}
                 className="filter-select"
+                disabled={['department', 'hod'].includes(user?.role)}
               >
-                <option value="">All Departments</option>
+                {!['department', 'hod'].includes(user?.role) && <option value="">All Departments</option>}
                 {departments.map(dept => (
                   <option key={dept._id} value={dept._id}>{dept.name}</option>
                 ))}
@@ -649,15 +684,31 @@ const Reports = () => {
             ) : (
               <>
                 <FileText size={16} />
-                Download CSV
+                Generate & Download CSV
               </>
             )}
           </button>
         </div>
       </div>
 
-
-    </div >
+      {loading ? (
+        <div className="report-loading">
+          <div className="spinner"></div>
+          <p>Generating report data...</p>
+        </div>
+      ) : reportData ? (
+        <div className="report-results">
+          {reportType === 'expenditures' && renderExpenditureReport()}
+          {reportType === 'allocations' && renderAllocationReport()}
+          {reportType === 'dashboard' && renderDashboardReport()}
+        </div>
+      ) : (
+        <div className="report-placeholder">
+          <div className="placeholder-content">
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

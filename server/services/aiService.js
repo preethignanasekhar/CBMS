@@ -464,6 +464,26 @@ const generateExplanation = async (financialYear) => {
     const pde = await calculatePredictiveExhaustion(financialYear);
     const bench = await generatePeerBenchmarking(financialYear);
 
+    // Calculate Global Financial Metrics
+    const allAllocations = await Allocation.find({ financialYear, status: 'active' }).lean();
+    const totalAllocated = allAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
+    const totalSpent = allAllocations.reduce((sum, a) => sum + a.spentAmount, 0);
+    const totalRemaining = totalAllocated - totalSpent;
+    const globalUtilizationPercent = totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0;
+    
+    const fyProgressPercent = riskScores[0]?.fyProgressPercent || 0;
+    
+    // Spending Pace Indicator
+    let spendingPace = 'On track';
+    let paceColor = 'var(--info)';
+    if (globalUtilizationPercent > fyProgressPercent + 10) {
+        spendingPace = 'Ahead of schedule';
+        paceColor = 'var(--warning)';
+    } else if (globalUtilizationPercent < fyProgressPercent - 15) {
+        spendingPace = 'Behind schedule';
+        paceColor = 'var(--success)';
+    }
+
     const highRiskCount = riskScores.filter(r => r.riskLevel === 'High').length;
     const criticalAnomalies = anomalies.filter(a => a.severity === 'critical').length;
     const pendingApprovals = await Expenditure.countDocuments({ status: { $in: ['pending', 'verified'] } });
@@ -491,15 +511,60 @@ const generateExplanation = async (financialYear) => {
         briefing += `Insight: ${topEfficient.name} is showing high efficiency with an average cost of ₹${Math.round(topEfficient.efficiencyRatio).toLocaleString()} per event.`;
     }
 
+    // AI Suggested Actions
+    const suggestions = [];
+    
+    // 1. Predictive exhaustion suggestions
+    pde.slice(0, 2).forEach(p => {
+        suggestions.push({
+            type: 'danger',
+            text: `Critical: ${p.departmentName} ${p.budgetHeadName} budget projected to exhaust by ${p.pdeDate}.`
+        });
+    });
+
+    // 2. High utilization alerts
+    anomalies.filter(a => a.type === 'HIGH_UTILIZATION').slice(0, 1).forEach(a => {
+        suggestions.push({
+            type: 'warning',
+            text: `Review ${a.anonymousId} equipment and consumables budget. Allocation is almost exhausted.`
+        });
+    });
+
+    // 3. Low utilization insights
+    anomalies.filter(a => a.type === 'LOW_UTILIZATION' && a.daysElapsed > 60).slice(0, 1).forEach(a => {
+        suggestions.push({
+            type: 'info',
+            text: `Spending in ${a.anonymousId} is lower than expected. Monthly targets may need review.`
+        });
+    });
+
+    // 4. Efficiency praise
+    if (topEfficient && topEfficient.eventCount > 3) {
+        suggestions.push({
+            type: 'success',
+            text: `High efficiency detected in ${topEfficient.name}. Model their event coordination for other departments.`
+        });
+    }
+
     return {
         overallStatus: briefing,
-        utilizationExplanation: `System-wide utilization is at ${Math.round(riskScores.reduce((a, b) => a + b.utilizationPercent, 0) / (riskScores.length || 1))}% against a calendar progress of ${Math.round(riskScores[0]?.fyProgressPercent || 0)}%.`,
+        generatedAt: new Date().toISOString(),
+        metrics: {
+            totalAllocated,
+            totalSpent,
+            totalRemaining,
+            utilizationPercent: Math.round(globalUtilizationPercent * 100) / 100,
+            fyProgress: Math.round(fyProgressPercent * 100) / 100,
+            spendingPace,
+            paceColor
+        },
+        utilizationExplanation: `System-wide utilization is at ${Math.round(globalUtilizationPercent)}% against a calendar progress of ${Math.round(fyProgressPercent)}%. Spending is currently ${spendingPace.toLowerCase()}.`,
         briefingItems: [
             { icon: 'alert', text: `${criticalAnomalies} Critical Alerts` },
             { icon: 'calendar', text: pde.length > 0 ? `Next exhaustion: ${pde[0].pdeDate}` : 'No immediate exhaustion risk' },
             { icon: 'trending', text: `${highRiskCount} High Risk Depts` }
         ],
-        pdeRecommendations: pde.slice(0, 3),
+        suggestions: suggestions.slice(0, 5),
         benchmarking: bench.slice(0, 5),
     };
 };

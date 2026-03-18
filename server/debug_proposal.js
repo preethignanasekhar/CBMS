@@ -1,38 +1,39 @@
 const mongoose = require('mongoose');
-const User = require('./models/User');
-require('./models/Department');
-require('./models/BudgetHead');
-const BudgetProposal = require('./models/BudgetProposal');
-const AuditLog = require('./models/AuditLog');
-require('dotenv').config();
+require('dotenv').config({ path: 'c:/Users/Admin/CBMS/.env' });
+const BudgetProposal = require('c:/Users/Admin/CBMS/server/models/BudgetProposal');
 
 async function debugProposal() {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('Connected to DB');
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB');
 
-        const proposals = await BudgetProposal.find({ status: 'verified_by_hod' })
-            .populate('department', 'name')
-            .populate('submittedBy', 'name email role');
+    const proposal = await BudgetProposal.findOne({ totalProposedAmount: 2789500 })
+      .populate('department', 'name')
+      .populate('proposalItems.budgetHead', 'name');
 
-        console.log('Proposals in verified_by_hod state:');
-        proposals.forEach(p => {
-            console.log(`ID: ${p._id} | Dept: ${p.department?.name} | Amount: ${p.totalProposedAmount} | ReadBy Count: ${p.readBy.length}`);
-        });
-
-        const auditCollection = mongoose.connection.collection('auditlogs');
-        const recentLogs = await auditCollection.find({}).sort({ createdAt: -1 }).limit(10).toArray();
-
-        console.log('\nRecent raw Audit Logs:');
-        recentLogs.forEach(log => {
-            console.log(`${log.createdAt.toISOString()} | ${log.eventType} | Actor: ${log.actor} | Role: ${log.actorRole}`);
-        });
-
-    } catch (err) {
-        console.error('Debug script error:', err);
-    } finally {
-        await mongoose.disconnect();
+    if (!proposal) {
+      console.log('Proposal not found');
+      process.exit(1);
     }
+
+    console.log('Proposal Found:');
+    console.log('ID:', proposal._id);
+    console.log('Department:', proposal.department?.name);
+    console.log('Financial Year:', proposal.financialYear);
+    console.log('Status:', proposal.status);
+    
+    proposal.proposalItems.forEach((item, idx) => {
+      console.log(`\nItem ${idx + 1}:`);
+      console.log('Budget Head:', item.budgetHead?.name);
+      console.log('Proposed Amount:', item.proposedAmount);
+      console.log('Monthly Breakdown:', JSON.stringify(item.monthlyBreakdown, null, 2));
+    });
+
+    await mongoose.disconnect();
+  } catch (err) {
+    console.error('Error:', err);
+    process.exit(1);
+  }
 }
 
 debugProposal();

@@ -1,7 +1,7 @@
 import React from 'react';
 import Tooltip from '../Tooltip/Tooltip';
 
-const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, disclaimer, onClick, className }) => {
+const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, disclaimer, onClick, className, subtitle }) => {
   // Determine trend color
   const getTrendClass = (trendValue) => {
     if (!trendValue) return '';
@@ -25,6 +25,18 @@ const StatCard = ({ title, value, icon, trend, color, tooltipText, isPending, di
           <h3 style={{ color: isPending ? 'var(--warning)' : 'inherit' }}>{value}</h3>
         </Tooltip>
         <p>{title}</p>
+        
+        {subtitle && (
+          <span className="metric-subtitle" style={{ 
+            fontSize: 'var(--font-xs)', 
+            color: 'var(--text-tertiary)',
+            display: 'block',
+            marginTop: '0.1rem'
+          }}>
+            {subtitle}
+          </span>
+        )}
+
         {trend && !isPending && (
           <span className={`metric-change ${trendClass}`} style={{
             color: trend > 0 ? 'var(--success)' : trend < 0 ? 'var(--error)' : 'var(--text-secondary)',

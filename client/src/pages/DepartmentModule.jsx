@@ -291,7 +291,8 @@ export const DepartmentDashboard = () => {
             )}
 
             <div className="dashboard-content">
-                <div className="card-standard budget-overview">
+                {!['coordinator', 'coordinater'].includes(user.role) && (
+                    <div className="card-standard budget-overview">
                     <div className="card-standard-header">
                         <h2>Budget Overview by Head</h2>
                         <p>Track allocation and utilization per budget head</p>
@@ -353,6 +354,7 @@ export const DepartmentDashboard = () => {
                         </table>
                     </div>
                 </div>
+                )}
 
                 <div className="right-column-content" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     <div className="card-standard quick-actions">
@@ -377,11 +379,10 @@ export const DepartmentDashboard = () => {
                             </button>
                             <button
                                 className="btn btn-secondary"
-                                onClick={handleDownloadReport}
-                                disabled={refreshing}
+                                onClick={() => navigate('/reports')}
                             >
-                                <Download size={18} />
-                                {refreshing ? 'Generating...' : 'Download Report'}
+                                <FileText size={18} />
+                                Detailed Reports
                             </button>
                         </div>
                     </div>
@@ -412,6 +413,7 @@ export const DepartmentDetail = () => {
     const [selectedFinancialYear, setSelectedFinancialYear] = useState(currentFY);
     const [inputFY, setInputFY] = useState(currentFY); // local input state, not yet committed
     const [financialYears, setFinancialYears] = useState([]);
+    const [selectedHead, setSelectedHead] = useState('all');
 
     useEffect(() => {
         fetchFinancialYears();
@@ -493,12 +495,17 @@ export const DepartmentDetail = () => {
     const getBudgetHeadBreakdownChart = () => {
         if (!departmentData || !departmentData.budgetHeadBreakdown) return null;
 
-        const data = Object.entries(departmentData.budgetHeadBreakdown).map(([name, values]) => ({
-            name,
+        const allData = Object.entries(departmentData.budgetHeadBreakdown).map(([fullName, values]) => ({
+            fullName,
+            name: values.budgetHeadCode || fullName,
             allocated: values.allocated,
             spent: values.spent,
             utilization: values.utilization
         }));
+
+        const data = selectedHead === 'all' 
+            ? allData 
+            : allData.filter(d => d.fullName === selectedHead);
 
         return {
             color: ['#667eea', '#28a745'],
@@ -506,9 +513,13 @@ export const DepartmentDetail = () => {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
                 formatter: (params) => {
-                    return params.map(param =>
-                        `${param.seriesName}: ${formatCurrency(param.value)}`
-                    ).join('<br/>');
+                    const code = params[0].name;
+                    const item = allData.find(d => d.name === code);
+                    const headName = item ? item.fullName : code;
+                    return `<strong>${headName} (${code})</strong><br/>` + 
+                        params.map(param =>
+                            `${param.seriesName}: ${formatCurrency(param.value)}`
+                        ).join('<br/>');
                 }
             },
             legend: {
@@ -527,9 +538,9 @@ export const DepartmentDetail = () => {
                 data: data.map(d => d.name),
                 axisLabel: {
                     interval: 0,
-                    rotate: 25,
-                    width: 120,
-                    overflow: 'truncate'
+                    rotate: 0,
+                    fontWeight: 600,
+                    fontSize: 11
                 }
             },
             yAxis: {
@@ -550,7 +561,15 @@ export const DepartmentDetail = () => {
                     barMaxWidth: 50,
                     barMinHeight: 4,
                     data: data.map(d => d.allocated),
-                    itemStyle: { color: '#667eea', borderRadius: [4, 4, 0, 0] }
+                    itemStyle: { color: '#667eea', borderRadius: [4, 4, 0, 0] },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: (params) => formatCurrency(params.value).split('.')[0].replace('₹', ''),
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#64748b'
+                    }
                 },
                 {
                     name: 'Spent',
@@ -558,7 +577,90 @@ export const DepartmentDetail = () => {
                     barMaxWidth: 50,
                     barMinHeight: 4,
                     data: data.map(d => d.spent),
-                    itemStyle: { color: '#28a745', borderRadius: [4, 4, 0, 0] }
+                    itemStyle: { color: '#28a745', borderRadius: [4, 4, 0, 0] },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: (params) => formatCurrency(params.value).split('.')[0].replace('₹', ''),
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#64748b'
+                    }
+                }
+            ]
+        };
+    };
+
+    const getBudgetDistributionChart = () => {
+        if (!departmentData || !departmentData.budgetHeadBreakdown) return null;
+
+        const data = Object.entries(departmentData.budgetHeadBreakdown).map(([name, values]) => ({
+            name,
+            value: values.allocated
+        })).filter(d => d.value > 0);
+
+        return {
+            title: {
+                text: 'Budget Distribution',
+                subtext: 'Allocation by Budget Head',
+                left: 'center',
+                textStyle: {
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: '#1e293b'
+                }
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: (params) => {
+                    return `${params.name}<br/>Allocated: ${formatCurrency(params.value)} (${params.percent}%)`;
+                }
+            },
+            legend: {
+                orient: 'vertical',
+                left: 'left',
+                top: 'middle',
+                type: 'scroll',
+                itemWidth: 15,
+                itemHeight: 15,
+                textStyle: {
+                    fontSize: 12,
+                    color: '#475569'
+                }
+            },
+            series: [
+                {
+                    name: 'Budget Allocation',
+                    type: 'pie',
+                    radius: ['45%', '75%'],
+                    center: ['65%', '55%'],
+                    avoidLabelOverlap: true,
+                    itemStyle: {
+                        borderRadius: 8,
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    },
+                    label: {
+                        show: false,
+                        position: 'center'
+                    },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 16,
+                            fontWeight: 'bold',
+                            formatter: '{b}\n{d}%'
+                        },
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    },
+                    labelLine: {
+                        show: false
+                    },
+                    data: data
                 }
             ]
         };
@@ -780,23 +882,58 @@ export const DepartmentDetail = () => {
                 </div>
             )}
 
-            {/* Budget Head Breakdown Chart */}
-            {getBudgetHeadBreakdownChart() ? (
-                <div className="chart-section">
-                    <h2>Budget Head-wise Allocation & Utilization</h2>
-                    <div className="chart-container">
-                        <ReactECharts option={getBudgetHeadBreakdownChart()} style={{ height: '400px', width: '100%' }} />
+            {/* Charts Section */}
+            <div className="charts-container" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', 
+                gap: '2.5rem', 
+                marginBottom: '3.5rem' 
+            }}>
+                {getBudgetHeadBreakdownChart() && (
+                    <div className="chart-section" style={{ background: 'white', padding: '2rem', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', color: '#1e293b', margin: 0, fontWeight: 700 }}>Allocation vs Utilization (by Code)</h2>
+                            <select 
+                                value={selectedHead} 
+                                onChange={(e) => setSelectedHead(e.target.value)}
+                                style={{ 
+                                    padding: '0.6rem 1.2rem', 
+                                    borderRadius: '10px', 
+                                    border: '1px solid #e2e8f0', 
+                                    fontSize: '0.9rem',
+                                    color: '#475569',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    backgroundColor: '#f8fafc',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                <option value="all">All Budget Heads</option>
+                                {Object.keys(departmentData.budgetHeadBreakdown).map(head => (
+                                    <option key={head} value={head}>{head}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <ReactECharts option={getBudgetHeadBreakdownChart()} style={{ height: '480px', width: '100%' }} />
                     </div>
-                </div>
-            ) : (
-                <div className="chart-section">
-                    <h2>Budget Head-wise Allocation & Utilization</h2>
-                    <div className="no-data-display">
-                        <AlertCircle size={40} />
-                        <p>No budget breakdown available for this financial year</p>
+                )}
+
+                {getBudgetDistributionChart() && (
+                    <div className="chart-section" style={{ background: 'white', padding: '2rem', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+                        <ReactECharts option={getBudgetDistributionChart()} style={{ height: '480px', width: '100%' }} />
                     </div>
-                </div>
-            )}
+                )}
+
+                {!getBudgetHeadBreakdownChart() && !getBudgetDistributionChart() && (
+                    <div className="chart-section full-width">
+                        <h2 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1.5rem', fontWeight: 700 }}>Budget Analytics</h2>
+                        <div className="no-data-display" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '3rem 0', opacity: 0.6 }}>
+                            <AlertCircle size={48} />
+                            <p>No budget data available for visualization</p>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* Budget Head Breakdown Table */}
             <div className="table-section">
@@ -838,6 +975,19 @@ export const DepartmentDetail = () => {
                                     </td>
                                 </tr>
                             ))}
+                            <tr className="total-row" style={{ backgroundColor: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
+                                <td colSpan="2" style={{ textAlign: 'right', color: '#64748b' }}>TOTAL</td>
+                                <td style={{ color: '#1e293b' }}>{formatCurrency(departmentData.summary.totalAllocated)}</td>
+                                <td style={{ color: '#28a745' }}>{formatCurrency(departmentData.summary.totalSpent)}</td>
+                                <td style={{ color: departmentData.summary.totalRemaining < 0 ? '#dc3545' : '#1e293b' }}>
+                                    {formatCurrency(departmentData.summary.totalRemaining)}
+                                </td>
+                                <td>
+                                    <div className="utilization-cell">
+                                        <span style={{ color: '#667eea' }}>{departmentData.summary.utilizationPercentage.toFixed(2)}%</span>
+                                    </div>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -887,28 +1037,6 @@ export const DepartmentDetail = () => {
                 </div>
             </div>
 
-            {/* Status Breakdown */}
-            <div className="status-breakdown-section">
-                <h2>Expenditure Status Summary</h2>
-                <div className="status-grid">
-                    <div className="status-card pending">
-                        <h3>{departmentData.expenditures.filter(e => e.status === 'pending').length}</h3>
-                        <p>Pending</p>
-                    </div>
-                    <div className="status-card verified">
-                        <h3>{departmentData.expenditures.filter(e => e.status === 'verified').length}</h3>
-                        <p>Verified</p>
-                    </div>
-                    <div className="status-card approved">
-                        <h3>{departmentData.expenditures.filter(e => e.status === 'approved' || e.status === 'finalized').length}</h3>
-                        <p>Approved</p>
-                    </div>
-                    <div className="status-card rejected">
-                        <h3>{departmentData.expenditures.filter(e => e.status === 'rejected').length}</h3>
-                        <p>Rejected</p>
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };
@@ -1080,7 +1208,7 @@ export const DepartmentForm = () => {
 
                     <div className="form-section">
                         <h3 className="section-title">
-                            <Users size={18} />
+                            <UsersIcon size={18} />
                             Administration
                         </h3>
 
@@ -1236,13 +1364,13 @@ export const Departments = () => {
                     <StatCard
                         title="With HOD"
                         value={stats.departmentsWithHOD}
-                        icon={<Users size={24} />}
+                        icon={<UsersIcon size={24} />}
                         color="var(--info)"
                     />
                     <StatCard
                         title="Without HOD"
                         value={stats.departmentsWithoutHOD}
-                        icon={<Users size={24} />}
+                        icon={<UsersIcon size={24} />}
                         color="var(--warning)"
                     />
                 </div>
@@ -1269,10 +1397,10 @@ export const Departments = () => {
                                 </td>
                                 <td>{dept.description || '-'}</td>
                                 <td>
-                                    {dept.hodInfo ? (
+                                    {dept.hod ? (
                                         <div className="hod-info">
-                                            <div className="hod-name">{dept.hodInfo.name}</div>
-                                            <div className="hod-email">{dept.hodInfo.email}</div>
+                                            <div className="hod-name">{dept.hod.name}</div>
+                                            <div className="hod-email">{dept.hod.email}</div>
                                         </div>
                                     ) : (
                                         <span className="no-hod">No HOD assigned</span>
@@ -1497,7 +1625,7 @@ export const DepartmentUsers = () => {
             {departmentUsers.length === 0 && (
                 <div className="no-users">
                     <div className="no-users-icon">
-                        <Users size={20} />
+                        <UsersIcon size={20} />
                     </div>
                     <h3>No Users Found</h3>
                     <p>No users found in your department matching the current filters.</p>
@@ -1507,7 +1635,7 @@ export const DepartmentUsers = () => {
             <div className="department-stats">
                 <div className="stats-card">
                     <div className="stat-icon">
-                        <Users size={20} />
+                        <UsersIcon size={20} />
                     </div>
                     <div className="stat-info">
                         <div className="stat-number">{departmentUsers.length}</div>

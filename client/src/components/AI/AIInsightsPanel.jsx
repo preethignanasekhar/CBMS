@@ -124,6 +124,51 @@ const AIInsightsPanel = ({ financialYear, compact = false }) => {
 
             {expanded && (
                 <div className="panel-content">
+                    {/* Key Metrics Dashboard */}
+                    {insights.metrics && (
+                        <div className="metrics-summary-grid">
+                            <div className="metric-card">
+                                <span className="label">Budget Utilization</span>
+                                <div className="flex items-end justify-between">
+                                    <span className="value">{insights.metrics.utilizationPercent}%</span>
+                                    <span className="text-xs opacity-50 mb-1">FY Progress: {insights.metrics.fyProgress}%</span>
+                                </div>
+                                <div className="mini-progress">
+                                    <div 
+                                        className="fill" 
+                                        style={{ 
+                                            width: `${Math.min(insights.metrics.utilizationPercent, 100)}%`,
+                                            background: insights.metrics.utilizationPercent > insights.metrics.fyProgress + 10 ? '#ef4444' : 'linear-gradient(90deg, #6366f1, #8b5cf6)'
+                                        }}
+                                    ></div>
+                                </div>
+                            </div>
+                            <div className="metric-card">
+                                <span className="label">Remaining Budget</span>
+                                <span className="value">₹{insights.metrics.totalRemaining.toLocaleString()}</span>
+                                <span className="text-xs opacity-50 mt-1">Available for allocation</span>
+                            </div>
+                            <div className="metric-card">
+                                <span className="label">Spending Pace</span>
+                                <div className="flex items-center gap-2">
+                                    <Activity size={16} style={{ color: insights.metrics.paceColor }} />
+                                    <span className="value" style={{ color: insights.metrics.paceColor }}>
+                                        {insights.metrics.spendingPace}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="metric-card">
+                                <span className="label">Budget Health</span>
+                                <div className="flex items-center gap-2">
+                                    <Shield size={16} style={{ color: health?.healthStatus === 'Healthy' ? '#10b981' : health?.healthStatus === 'Warning' ? '#f59e0b' : '#ef4444' }} />
+                                    <span className="value" style={{ color: health?.healthStatus === 'Healthy' ? '#10b981' : health?.healthStatus === 'Warning' ? '#f59e0b' : '#ef4444' }}>
+                                        {health?.healthStatus || 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Overall Status & Briefing Grid */}
                     <div className="insight-section status-section">
                         <p className="status-text">{insights.overallStatus}</p>
@@ -131,13 +176,31 @@ const AIInsightsPanel = ({ financialYear, compact = false }) => {
                             {insights.briefingItems?.map((item, idx) => (
                                 <div key={idx} className="briefing-item">
                                     {item.icon === 'alert' && <AlertTriangle size={16} className="text-red-500" />}
-                                    {item.icon === 'calendar' && <Calendar size={16} className="text-blue-500" />}
+                                    {item.icon === 'calendar' && <Clock size={16} className="text-blue-500" />}
                                     {item.icon === 'trending' && <TrendingUp size={16} className="text-orange-500" />}
                                     <span>{item.text}</span>
                                 </div>
                             ))}
                         </div>
-                        <p className="explanation-text" style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
+                    </div>
+
+                    {/* AI Suggested Actions */}
+                    {insights.suggestions && (
+                        <div className="insight-section suggestion-section">
+                            <h4>AI Suggested Actions</h4>
+                            <div className="suggestion-list">
+                                {insights.suggestions.map((suggestion, idx) => (
+                                    <div key={idx} className={`suggestion-item ${suggestion.type}`}>
+                                        <div className="bullet"></div>
+                                        <span>{suggestion.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="insight-section">
+                        <p className="explanation-text">
                             {insights.utilizationExplanation}
                         </p>
                     </div>

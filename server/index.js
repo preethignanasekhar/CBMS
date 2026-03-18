@@ -35,24 +35,24 @@ const { initSocket } = require('./services/socketService');
 
 const app = express();
 
-// Comprehensive Request Logger for Debugging
-app.use((req, res, next) => {
-  if (req.url.includes('/api/auth/profile/picture')) {
-    console.log(`[HTTP-TRACE] ${req.method} ${req.url}`);
-    console.log(`  Content-Type: ${req.headers['content-type']}`);
-    console.log(`  Content-Length: ${req.headers['content-length']}`);
-  }
-  next();
-});
-
 // Middleware
 app.use(cors({
   origin: true,
   credentials: true,
   optionsSuccessStatus: 200
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Comprehensive Request Logger for Debugging
+app.use((req, res, next) => {
+  console.log(`[HTTP] ${req.method} ${req.url}`);
+  if (req.method !== 'GET' && req.url.startsWith('/api')) {
+    console.log(`  Body:`, JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
 
 // Database connection status middleware
 app.use((req, res, next) => {

@@ -30,18 +30,18 @@ router.get('/', getExpenditures);
 router.get('/stats', getExpenditureStats);
 router.get('/:id', getExpenditureById);
 
-// Submit expenditure (department users, HODs, Admin, Office)
+// Submit expenditure (department users, Coordinator)
 router.post('/',
-  authorize('department', 'hod', 'admin', 'office'),
+  authorize('department', 'coordinator', 'coordinater'),
   handleFileUpload,
   attachFilesToBody,
   validateAttachments,
   submitExpenditure
 );
 
-// Resubmit expenditure (department users, HODs, Admin, Office)
+// Resubmit expenditure (department users, Coordinator)
 router.post('/:id/resubmit',
-  authorize('department', 'hod', 'admin', 'office'),
+  authorize('department', 'coordinator', 'coordinater'),
   handleFileUpload,
   attachFilesToBody,
   resubmitExpenditure

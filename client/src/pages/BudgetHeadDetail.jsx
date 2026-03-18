@@ -75,8 +75,7 @@ const BudgetHeadDetail = () => {
                         <div className="bhd-icon"><Wallet size={32} /></div>
                         <div className="header-info">
                             <h1>{budgetHead.name}</h1>
-                            <p className="bhd-code">Code: {budgetHead.code}</p>
-                            <span className="category-badge">{budgetHead.category?.toUpperCase()}</span>
+                            {/* Code and Category removed as per request */}
                             {budgetHead.description && <p className="bhd-desc">{budgetHead.description}</p>}
                         </div>
                     </div>
@@ -247,17 +246,6 @@ const BudgetHeadDetail = () => {
                 </div>
             </div>
 
-            {/* Status Breakdown */}
-            <div className="bhd-section">
-                <h2>Expenditure Status Summary</h2>
-                <div className="status-grid">
-                    <div className="status-card pending"><h3>{statusBreakdown.pending}</h3><p>Pending</p></div>
-                    <div className="status-card verified"><h3>{statusBreakdown.verified}</h3><p>Verified</p></div>
-                    <div className="status-card approved"><h3>{statusBreakdown.approved}</h3><p>Approved</p></div>
-                    <div className="status-card finalized"><h3>{statusBreakdown.finalized}</h3><p>Finalized</p></div>
-                    <div className="status-card rejected"><h3>{statusBreakdown.rejected}</h3><p>Rejected</p></div>
-                </div>
-            </div>
         </div>
     );
 };

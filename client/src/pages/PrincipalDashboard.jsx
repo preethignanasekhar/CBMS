@@ -17,12 +17,12 @@ import {
     AlertCircle,
     Check,
     RefreshCw,
-    Calendar
+    Calendar,
+    Search
 } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
 import StatusBadge from '../components/Common/StatusBadge';
-import FloatingAIChat from '../components/AI/FloatingAIChat';
 import './HODDashboard.scss'; // Reusing HOD dashboard styles for consistency
 
 const PrincipalDashboard = () => {
@@ -35,6 +35,7 @@ const PrincipalDashboard = () => {
     const [error, setError] = useState(null);
     const [financialYears, setFinancialYears] = useState([]);
     const [targetYear, setTargetYear] = useState(getCurrentFinancialYear());
+    const [tempYear, setTempYear] = useState(targetYear);
     const { socket } = useSocket();
 
     const fetchData = useCallback(async () => {
@@ -71,7 +72,11 @@ const PrincipalDashboard = () => {
         const month = date.getMonth();
         const year = date.getFullYear();
         const startYear = month >= 3 ? year : year - 1;
-        setTargetYear(`${startYear}-${startYear + 1}`);
+        setTempYear(`${startYear}-${startYear + 1}`);
+    };
+
+    const handleYearSearch = () => {
+        setTargetYear(tempYear);
     };
 
     useEffect(() => {
@@ -107,9 +112,31 @@ const PrincipalDashboard = () => {
                 title="Management Dashboard"
                 subtitle="Approval Queue & Financial Oversight"
             >
-                <button className="btn btn-secondary flex items-center gap-2" onClick={fetchData}>
-                    <RefreshCw size={18} /> Refresh Dashboard
-                </button>
+                <div className="header-actions-group">
+                    <div className="flexible-year-input">
+                        <Calendar size={14} className="text-secondary" />
+                        <input
+                            className="year-input"
+                            value={tempYear}
+                            onChange={(e) => setTempYear(e.target.value)}
+                            placeholder="YYYY-YYYY"
+                        />
+                        <div className="date-picker-helper">
+                            <input
+                                type="date"
+                                className="hidden-date-picker"
+                                onChange={handleDateToFY}
+                            />
+                            <Calendar size={12} />
+                        </div>
+                    </div>
+                    <button className="btn btn-primary search-btn" onClick={handleYearSearch} style={{ minWidth: '32px', width: '32px', height: '32px', padding: '0' }}>
+                        <Search size={16} />
+                    </button>
+                    <button className="btn btn-secondary" onClick={fetchData} style={{ width: '32px', height: '32px', padding: '0' }}>
+                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </PageHeader>
 
             {error && <div className="error-message">{error}</div>}
@@ -193,7 +220,10 @@ const PrincipalDashboard = () => {
                                             <td>{proposal.department?.name}</td>
                                             <td>
                                                 <div className="font-bold">Annual Budget {proposal.financialYear}</div>
-                                                <div className="text-xs text-gray-500">{proposal.proposalItems?.length} items</div>
+                                                <div className="text-xs text-gray-500">
+                                                    {proposal.proposalItems?.length} items: {proposal.proposalItems?.slice(0, 3).map(i => i.budgetHead?.name || i.budgetHeadName).join(', ')}
+                                                    {proposal.proposalItems?.length > 3 ? '...' : ''}
+                                                </div>
                                             </td>
                                             <td>{formatDate(proposal.submittedAt || proposal.createdAt)}</td>
                                             <td className="font-bold text-blue-600">{formatCurrency(proposal.totalProposedAmount)}</td>
@@ -246,8 +276,6 @@ const PrincipalDashboard = () => {
                 </div>
             </div>
 
-            {/* AI Chat Integration */}
-            <FloatingAIChat />
         </div>
     );
 };

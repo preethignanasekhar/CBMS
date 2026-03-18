@@ -105,6 +105,16 @@
             font-weight: 700;
             color: var(--primary);
         }
+
+        .budget-heads-cell {
+            max-width: 250px;
+        }
+
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     }
 
     .status-trail {

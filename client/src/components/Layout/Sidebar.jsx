@@ -51,9 +51,8 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           ...baseItems,
           { path: '/users', label: 'Users', icon: <Users size={20} /> },
-          { path: '/departments', label: 'Departments', icon: <Building2 size={20} /> },
           { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
-          { path: '/settings', label: 'Settings', icon: <Settings size={20} /> },
+          { path: '/departments', label: 'Departments', icon: <Building2 size={20} /> },
           historyItem
         ];
       case 'office':
@@ -62,10 +61,9 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
           { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
           { path: '/consolidated-view', label: 'Consolidated', icon: <TrendingUp size={20} /> },
-          { path: '/budget-utilization-dashboard', label: 'Utilization Dashboard', icon: <Gauge size={20} /> },
           { path: '/categories', label: 'Category', icon: <Layers size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
-          { path: '/year-comparison', label: 'Year-over-Year', icon: <LineChart size={20} /> },
+
           historyItem
         ];
       case 'department':
@@ -74,6 +72,7 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           { path: '/budget-proposals', label: 'Budget Proposals', icon: <FileText size={20} /> },
           { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
           { path: '/submit-expenditure', label: 'Submit Expenditure', icon: <PlusCircle size={20} /> },
+          { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           historyItem
         ];
       case 'hod':
@@ -81,6 +80,7 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
           { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/hod-analytics', label: 'Analytics', icon: <LineChart size={20} /> },
           { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
+          { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           historyItem
         ];
       case 'vice_principal':
@@ -88,10 +88,9 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
-          { path: '/budget-utilization-dashboard', label: 'Budget Dashboard', icon: <Gauge size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           { path: '/consolidated-view', label: 'Consolidated View', icon: <TrendingUp size={20} /> },
-          { path: '/year-comparison', label: 'Year Comparison', icon: <LineChart size={20} /> },
+
           { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
           historyItem
         ];
@@ -99,6 +98,15 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           ...baseItems,
           { path: '/audit-logs', label: 'Audit Logs', icon: <Search size={20} /> },
+          { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
+          historyItem
+        ];
+      case 'coordinator':
+      case 'coordinater':
+        return [
+          ...baseItems,
+          { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
+          { path: '/submit-expenditure', label: 'Submit Expenditure', icon: <PlusCircle size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           historyItem
         ];

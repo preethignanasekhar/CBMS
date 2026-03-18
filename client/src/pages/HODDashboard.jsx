@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { expenditureAPI, budgetProposalAPI, allocationAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { CheckCircle, Paperclip, Check, X, ArrowRight, Wallet, PieChart, FileText, CreditCard, AlertCircle, Clock, Eye, IndianRupee, TrendingUp, ShieldCheck, Calendar, RefreshCw } from 'lucide-react';
+import { CheckCircle, Paperclip, Check, X, ArrowRight, Wallet, PieChart, FileText, CreditCard, AlertCircle, Clock, Eye, IndianRupee, TrendingUp, ShieldCheck, Calendar, RefreshCw, Search } from 'lucide-react';
 import { getCurrentFinancialYear } from '../utils/dateUtils';
 import PageHeader from '../components/Common/PageHeader';
 import StatusBadge from '../components/Common/StatusBadge';
 import StatCard from '../components/Common/StatCard';
 import ContentCard from '../components/Common/ContentCard';
-import FloatingAIChat from '../components/AI/FloatingAIChat';
 import './HODDashboard.scss';
 
 const HODDashboard = () => {
@@ -31,6 +30,7 @@ const HODDashboard = () => {
   const { socket } = useSocket();
   const [financialYears, setFinancialYears] = useState([]);
   const [targetYear, setTargetYear] = useState(getCurrentFinancialYear());
+  const [tempYear, setTempYear] = useState(targetYear);
   const [statusFilter] = useState('pending'); // Action Zone: Only Pending Verification
   const [dashboardData, setDashboardData] = useState({
     stats: {
@@ -39,6 +39,22 @@ const HODDashboard = () => {
       totalRemaining: 0
     }
   });
+
+  const calculateMonthlyTotals = (items) => {
+    const totals = { 
+        apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0, oct: 0, nov: 0, dec: 0, jan: 0, feb: 0, mar: 0 
+    };
+    if (!items) return totals;
+    
+    items.forEach(item => {
+        if (item.monthlyBreakdown) {
+            Object.keys(totals).forEach(month => {
+                totals[month] += (item.monthlyBreakdown[month] || 0);
+            });
+        }
+    });
+    return totals;
+  };
 
   useEffect(() => {
     fetchData();
@@ -61,7 +77,11 @@ const HODDashboard = () => {
     const month = date.getMonth();
     const year = date.getFullYear();
     const startYear = month >= 3 ? year : year - 1;
-    setTargetYear(`${startYear}-${startYear + 1}`);
+    setTempYear(`${startYear}-${startYear + 1}`);
+  };
+
+  const handleYearSearch = () => {
+    setTargetYear(tempYear);
   };
 
   // Real-time updates
@@ -135,7 +155,7 @@ const HODDashboard = () => {
         params.currentApprover = 'hod';
       }
 
-      const response = await expenditureAPI.getExpenditures(params);
+      const response = await expenditureAPI.getExpenditures({ ...params, limit: 1000 });
       setExpenditures(Array.isArray(response?.data?.data?.expenditures) ? response.data.data.expenditures : []);
     } catch (err) {
       console.error('Error fetching expenditures:', err);
@@ -163,7 +183,7 @@ const HODDashboard = () => {
         params.status = 'rejected';
       }
 
-      const response = await budgetProposalAPI.getBudgetProposals(params);
+      const response = await budgetProposalAPI.getBudgetProposals({ ...params, limit: 1000 });
       setProposals(Array.isArray(response?.data?.data?.proposals) ? response.data.data.proposals : []);
     } catch (err) {
       console.error('Error fetching budget proposals:', err);
@@ -187,7 +207,21 @@ const HODDashboard = () => {
   };
 
   const handleProposalVerify = async (proposal) => {
-    setSelectedProposal(proposal);
+    setLoading(true);
+    try {
+      const response = await budgetProposalAPI.getBudgetProposalById(proposal._id);
+      if (response?.data?.success) {
+        setSelectedProposal(response.data.data);
+      } else {
+        setSelectedProposal(proposal); 
+      }
+    } catch (err) {
+      console.error('Failed to fetch full proposal detail:', err);
+      setSelectedProposal(proposal);
+    } finally {
+      setLoading(false);
+    }
+    
     setSelectedExpenditure(null);
     setApprovalRemarks('');
     setShowProposalModal(true);
@@ -313,9 +347,31 @@ const HODDashboard = () => {
         title="HOD Dashboard"
         subtitle="Overview of departmental budget allocation, proposals, and event expenditures"
       >
-        <button className="btn btn-secondary flex items-center gap-2" onClick={fetchData}>
-          <RefreshCw size={18} /> Refresh Dashboard
-        </button>
+        <div className="header-actions-group">
+          <div className="flexible-year-input">
+            <Calendar size={14} className="text-secondary" />
+            <input 
+              className="year-input"
+              value={tempYear}
+              onChange={(e) => setTempYear(e.target.value)}
+              placeholder="YYYY-YYYY"
+            />
+            <div className="date-picker-helper">
+              <input 
+                type="date" 
+                className="hidden-date-picker" 
+                onChange={handleDateToFY}
+              />
+              <Calendar size={12} />
+            </div>
+          </div>
+          <button className="btn btn-primary search-btn" onClick={handleYearSearch} style={{ minWidth: '32px', padding: '0', width: '32px', height: '32px' }}>
+            <Search size={16} />
+          </button>
+          <button className="btn btn-secondary" onClick={fetchData} style={{ width: '32px', height: '32px', padding: '0' }}>
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </PageHeader>
 
       <div className="stats-grid-4 mb-5">
@@ -457,7 +513,7 @@ const HODDashboard = () => {
       {/* Proposal Approval Modal */}
       {showProposalModal && selectedProposal && (
         <div className="modal-overlay">
-          <div className="modal-content max-w-4xl">
+          <div className="modal-content max-w-5xl">
             <div className="modal-header">
               <h3>Verify Budget Proposal: FY {selectedProposal.financialYear}</h3>
               <button className="modal-close" onClick={() => setShowProposalModal(false)}>
@@ -466,7 +522,7 @@ const HODDashboard = () => {
             </div>
 
             <div className="modal-body">
-              <div className="detail-grid mb-6">
+              <div className="detail-grid mb-4">
                 <div className="detail-item">
                   <label>Department</label>
                   <div>{selectedProposal.departmentName || selectedProposal.department?.name}</div>
@@ -485,15 +541,16 @@ const HODDashboard = () => {
                 </div>
               </div>
 
-              <div className="section-title mb-3">Itemized Budget Heads</div>
-              <div className="table-container mb-6">
+              <div className="section-title mb-2">Itemized Budget Heads</div>
+              <div className="table-container mb-4">
                 <table className="details-table">
                   <thead>
                     <tr>
                       <th>Budget Head</th>
+                      <th style={{ textAlign: 'right' }}>Proposed Amount</th>
+                      <th style={{ textAlign: 'right' }}>Reported Utilization</th>
                       <th style={{ textAlign: 'right' }}>Prev. Year Allocated</th>
                       <th style={{ textAlign: 'right' }}>Prev. Year Spent</th>
-                      <th style={{ textAlign: 'right' }}>Proposed Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -501,22 +558,96 @@ const HODDashboard = () => {
                       const bhId = item.budgetHead?._id || item.budgetHead;
                       const stats = previousYearStats[bhId] || {};
                       return (
-                        <tr key={idx}>
-                          <td>
-                            <div className="font-medium">{item.budgetHead?.name}</div>
-                            <div className="text-xs text-gray-500">{item.budgetHead?.category}</div>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>{stats.allocated ? formatCurrency(stats.allocated) : '-'}</td>
-                          <td style={{ textAlign: 'right' }}>{stats.allocated ? formatCurrency(stats.spent || 0) : '-'}</td>
-                          <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(item.proposedAmount)}</td>
-                        </tr>
+                        <React.Fragment key={idx}>
+                          <tr className="border-b hover:bg-gray-50">
+                            <td>
+                              <div className="font-bold text-gray-800">{item.budgetHead?.name || 'LoadingBudgetHead...'}</div>
+                              {item.justification && <div className="text-xs text-gray-400 italic mt-1">{item.justification}</div>}
+                            </td>
+                            <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(item.proposedAmount)}</td>
+                            <td style={{ textAlign: 'right' }}>{item.previousYearUtilization ? formatCurrency(item.previousYearUtilization) : '₹0'}</td>
+                            <td style={{ textAlign: 'right' }}>{stats.allocated ? formatCurrency(stats.allocated) : '-'}</td>
+                            <td style={{ textAlign: 'right' }}>{stats.allocated ? formatCurrency(stats.spent || 0) : '-'}</td>
+                          </tr>
+                          {item.proposedAmount > 0 && (
+                            <tr>
+                              <td colSpan="5" style={{ padding: '12px 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', boxSizing: 'border-box' }}>
+                                <div style={{ 
+                                  fontSize: '0.7rem', 
+                                  fontWeight: '800', 
+                                  color: '#64748b', 
+                                  textTransform: 'uppercase', 
+                                  marginBottom: '8px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px',
+                                  letterSpacing: '0.025em'
+                                }}>
+                                  <Calendar size={14} style={{ color: 'var(--primary)' }} /> Monthly Expenditure Plan
+                                </div>
+                                <div style={{ 
+                                          display: 'grid', 
+                                          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', 
+                                          gap: '10px 12px', 
+                                          fontSize: '0.8rem',
+                                          background: '#ffffff',
+                                          padding: '1rem',
+                                          borderRadius: '8px',
+                                          border: '1px solid #e2e8f0',
+                                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
+                                          boxSizing: 'border-box'
+                                        }}>
+                                          {['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar'].map(m => (
+                                            <div key={m} style={{ display: 'flex', flexDirection: 'column' }}>
+                                              <span style={{ color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.6rem' }}>{m}</span>
+                                              <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(item.monthlyBreakdown?.[m] || 0)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colSpan="3" className="font-bold">Total</td>
-                      <td style={{ textAlign: 'right' }} className="font-bold text-lg text-blue-700">
+                  {/* Monthly Totals Summary Section */}
+                  <tfoot style={{ borderTop: '2px solid #e2e8f0' }}>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <td colSpan="5" style={{ padding: '1.25rem' }}>
+                        <div style={{ 
+                            fontSize: '0.85rem', 
+                            fontWeight: '800', 
+                            color: '#1e293b', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px',
+                            marginBottom: '0.75rem',
+                            textTransform: 'uppercase'
+                        }}>
+                          <TrendingUp size={16} style={{ color: 'var(--primary)' }} /> Consolidated Monthly Totals (Sum Data)
+                        </div>
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                          gap: '10px 12px',
+                          background: '#fff',
+                          padding: '1rem',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0'
+                        }}>
+                          {Object.entries(calculateMonthlyTotals(selectedProposal.proposalItems)).map(([month, total]) => (
+                            <div key={month} style={{ display: 'flex', flexDirection: 'column', borderLeft: '3px solid var(--primary)', paddingLeft: '8px' }}>
+                              <span style={{ color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.6rem' }}>{month} SUM</span>
+                              <span style={{ color: '#1e293b', fontWeight: '700', fontSize: '0.85rem' }}>{formatCurrency(total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr style={{ background: '#f1f5f9', fontWeight: '800' }}>
+                      <td colSpan="4" className="font-bold py-3 px-4">Grand Total Proposed</td>
+                      <td style={{ textAlign: 'right' }} className="font-bold text-lg text-blue-700 py-3 px-4">
                         {formatCurrency(selectedProposal.totalProposedAmount)}
                       </td>
                     </tr>
@@ -524,10 +655,63 @@ const HODDashboard = () => {
                 </table>
               </div>
 
-              {selectedProposal.description && (
-                <div className="description-box mb-6">
-                  <label>Justification / Description</label>
-                  <p>{selectedProposal.description}</p>
+              {selectedProposal.notes && (
+                <div className="notes-box mb-4" style={{ background: '#fff9db', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #fcc419' }}>
+                  <label style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#856404', display: 'block', marginBottom: '4px' }}>Proposal Notes / Information</label>
+                  <p style={{ margin: 0, fontSize: '0.95rem', color: '#495057', whiteSpace: 'pre-wrap' }}>{selectedProposal.notes}</p>
+                </div>
+              )}
+
+              {selectedProposal.approvalSteps?.length > 0 && (
+                <div className="approval-history mb-4" style={{ padding: '0.625rem', background: '#f8f9fa', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid #e9ecef' }}>
+                  <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#495057' }}>Activity History:</strong>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {/* Show only the latest cycle of approval steps for clarity */}
+                    {(() => {
+                      const steps = selectedProposal.approvalSteps || [];
+                      const lastSubmitIndex = [...steps].reverse().findIndex(s => s.decision === 'submit' || s.decision === 'resubmit');
+                      const startIndex = lastSubmitIndex === -1 ? 0 : steps.length - 1 - lastSubmitIndex;
+                      
+                      const currentCycleSteps = steps.slice(startIndex);
+                      const hasSubmissionInSteps = currentCycleSteps.some(s => s.decision === 'submit' || s.decision === 'resubmit');
+
+                      return (
+                        <>
+                          {!hasSubmissionInSteps && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#6c757d' }}></span>
+                              <span style={{ color: '#6c757d' }}>Submitted</span>
+                              <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>
+                                {new Date(selectedProposal.submittedAt || selectedProposal.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                          {currentCycleSteps.map((step, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ 
+                                width: '8px', 
+                                height: '8px', 
+                                borderRadius: '50%', 
+                                background: step.decision === 'reject' ? '#dc3545' : 
+                                           (['submit', 'resubmit'].includes(step.decision)) ? '#1c7ed6' : '#28a745' 
+                              }}></span>
+                              <span>
+                                <strong style={{ textTransform: 'capitalize' }}>
+                                  {step.decision === 'verify' ? 'Verified' : 
+                                   step.decision === 'resubmit' ? 'Edited & Submitted' : 
+                                   step.decision === 'submit' ? 'Submitted' : 
+                                   step.decision}
+                                </strong>
+                                <span style={{ color: '#6c757d', marginLeft: '4px' }}>by {step.role?.toUpperCase()}</span>
+                              </span>
+                              <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>({new Date(step.timestamp).toLocaleDateString()})</span>
+                              {step.remarks && <span style={{ fontStyle: 'italic', color: '#6c757d', marginLeft: '4px' }}>- "{step.remarks}"</span>}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
 
@@ -538,19 +722,19 @@ const HODDashboard = () => {
                   value={approvalRemarks}
                   onChange={(e) => setApprovalRemarks(e.target.value)}
                   placeholder="Enter your remarks here..."
-                  rows="3"
+                  rows="2"
                 />
               </div>
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowProposalModal(false)} disabled={processing}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowProposalModal(false)} disabled={processing}>
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={() => processApproval('reject')} disabled={processing || !approvalRemarks.trim()}>
+              <button className="btn btn-danger btn-sm" onClick={() => processApproval('reject')} disabled={processing || !approvalRemarks.trim()}>
                 Reject Proposal
               </button>
-              <button className="btn btn-success" onClick={() => processApproval('approve')} disabled={processing}>
+              <button className="btn btn-success btn-sm" onClick={() => processApproval('approve')} disabled={processing}>
                 {processing ? 'Processing...' : 'Verify & Forward'}
               </button>
             </div>
@@ -570,7 +754,7 @@ const HODDashboard = () => {
             </div>
 
             <div className="modal-body">
-              <div className="detail-grid mb-6">
+              <div className="detail-grid mb-4">
                 <div className="detail-item">
                   <label>Event Name</label>
                   <div className="font-bold">{selectedExpenditure.eventName}</div>
@@ -597,8 +781,8 @@ const HODDashboard = () => {
                 </div>
               </div>
 
-              <div className="section-title mb-3">Itemized Expense Breakdown</div>
-              <div className="table-container mb-6 overflow-x-auto">
+              <div className="section-title mb-2">Itemized Expense Breakdown</div>
+              <div className="table-container mb-4 overflow-x-auto">
                 <table className="details-table">
                   <thead>
                     <tr>
@@ -619,7 +803,38 @@ const HODDashboard = () => {
                         </td>
                         <td><span className="badge-gray">{item.category}</span></td>
                         <td className="text-xs max-w-xs">{item.description}</td>
-                        <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(item.amount)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="font-bold">{formatCurrency(item.amount)}</div>
+                          {item.attachments && item.attachments.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2 justify-end">
+                              {item.attachments.map((file, fIdx) => (
+                                <a 
+                                  key={fIdx} 
+                                  href={file.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="attachment-link"
+                                  title={file.originalName || 'View Bill'}
+                                  style={{ 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '4px', 
+                                    fontSize: '0.65rem', 
+                                    background: '#e0f2f1', 
+                                    color: '#00695c', 
+                                    padding: '2px 6px', 
+                                    borderRadius: '4px',
+                                    textDecoration: 'none',
+                                    fontWeight: 'bold',
+                                    border: '1px solid #b2dfdb'
+                                  }}
+                                >
+                                  <Paperclip size={10} /> Bill {fIdx + 1}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -634,6 +849,25 @@ const HODDashboard = () => {
                 </table>
               </div>
 
+              {selectedExpenditure.approvalSteps?.length > 0 && (
+                <div className="approval-history mb-4" style={{ padding: '0.625rem', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid #e0f2fe' }}>
+                  <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#0369a1' }}>Approval Trail:</strong>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedExpenditure.approvalSteps.map((step, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: step.decision === 'reject' ? '#dc3545' : '#10b981' }}></span>
+                        <span>
+                          <strong style={{ textTransform: 'capitalize' }}>{step.decision === 'verify' ? 'Verified' : step.decision}</strong>
+                          <span style={{ color: '#64748b', marginLeft: '4px' }}>by {step.role?.toUpperCase()}</span>
+                        </span>
+                        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>({new Date(step.timestamp).toLocaleDateString()})</span>
+                        {step.remarks && <span style={{ fontStyle: 'italic', color: '#475569', marginLeft: '4px' }}>- "{step.remarks}"</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label htmlFor="remarks">Remarks <span className="text-xs font-normal text-gray-400">(Required for rejection)</span></label>
                 <textarea
@@ -641,19 +875,19 @@ const HODDashboard = () => {
                   value={approvalRemarks}
                   onChange={(e) => setApprovalRemarks(e.target.value)}
                   placeholder="Enter your verification remarks..."
-                  rows="3"
+                  rows="2"
                 />
               </div>
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowApprovalModal(false)} disabled={processing}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowApprovalModal(false)} disabled={processing}>
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={() => processApproval('reject')} disabled={processing || !approvalRemarks.trim()}>
+              <button className="btn btn-danger btn-sm" onClick={() => processApproval('reject')} disabled={processing || !approvalRemarks.trim()}>
                 Reject
               </button>
-              <button className="btn btn-primary" onClick={() => processApproval('approve')} disabled={processing}>
+              <button className="btn btn-primary btn-sm" onClick={() => processApproval('approve')} disabled={processing}>
                 {processing ? 'Processing...' : 'Verify & Forward'}
               </button>
             </div>
@@ -661,8 +895,6 @@ const HODDashboard = () => {
         </div>
       )}
 
-      {/* AI Chat Integration */}
-      <FloatingAIChat />
     </div>
   );
 };

@@ -74,7 +74,8 @@ const HODHistory = () => {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return (p?.financialYear || '').toLowerCase().includes(q) ||
-            (p?.submittedBy?.name || '').toLowerCase().includes(q);
+            (p?.submittedBy?.name || '').toLowerCase().includes(q) ||
+            (p?.proposalItems || []).some(item => (item.budgetHead?.name || item.budgetHeadName || '').toLowerCase().includes(q));
     });
 
     const filteredExpenditures = (expenditures || [])
@@ -83,7 +84,8 @@ const HODHistory = () => {
             if (!searchQuery) return true;
             const q = searchQuery.toLowerCase();
             return (e?.eventName || '').toLowerCase().includes(q) ||
-                (e?.submittedBy?.name || '').toLowerCase().includes(q);
+                (e?.submittedBy?.name || '').toLowerCase().includes(q) ||
+                (e?.budgetHead?.name || '').toLowerCase().includes(q);
         });
 
     return (
@@ -145,6 +147,7 @@ const HODHistory = () => {
                                     <tr>
                                         <th>Financial Year</th>
                                         <th>Submitted By</th>
+                                        <th>Budget Heads</th>
                                         <th>Total Proposed</th>
                                         <th>Date</th>
                                         <th>Status</th>
@@ -156,6 +159,11 @@ const HODHistory = () => {
                                         <tr key={proposal?._id}>
                                             <td><strong>{proposal?.financialYear || '—'}</strong></td>
                                             <td>{proposal?.submittedBy?.name || '—'}</td>
+                                            <td className="budget-heads-cell">
+                                                <div className="text-xs max-w-xs truncate" title={proposal?.proposalItems?.map(i => i.budgetHead?.name || i.budgetHeadName).join(', ')}>
+                                                    {proposal?.proposalItems?.map(i => i.budgetHead?.name || i.budgetHeadName).join(', ') || '—'}
+                                                </div>
+                                            </td>
                                             <td className="amount">{formatCurrency(proposal?.totalProposedAmount)}</td>
                                             <td>{formatDate(proposal?.createdAt)}</td>
                                             <td><StatusBadge status={proposal?.status} /></td>
@@ -203,7 +211,7 @@ const HODHistory = () => {
                                 <thead>
                                     <tr>
                                         <th>Event Name</th>
-                                        <th>Event Type</th>
+                                        <th>Budget Head</th>
                                         <th>Amount</th>
                                         <th>Event Date</th>
                                         <th>Status</th>
@@ -214,7 +222,7 @@ const HODHistory = () => {
                                     {filteredExpenditures.map(exp => (
                                         <tr key={exp?._id}>
                                             <td><strong>{exp?.eventName || '—'}</strong></td>
-                                            <td>{exp?.eventType || '—'}</td>
+                                            <td>{exp?.budgetHead?.name || '—'}</td>
                                             <td className="amount">{formatCurrency(exp?.totalAmount)}</td>
                                             <td>{formatDate(exp?.eventDate)}</td>
                                             <td><StatusBadge status={exp?.status} /></td>

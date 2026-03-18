@@ -333,9 +333,14 @@ const getDashboardReport = async (req, res) => {
         .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
-      // 4. Spent Amount (Alias for totalUtilized for frontend compatibility)
+      // 4. Spent Amount (ONLY Finalized expenditures - money truly disbursed)
       totalSpent: expenditures
-        .filter(exp => ['verified', 'approved', 'finalized'].includes(exp.status))
+        .filter(exp => exp.status === 'finalized')
+        .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
+
+      // 5. Pipeline Amount (Verified or Approved but NOT yet finalized)
+      totalPipeline: expenditures
+        .filter(exp => ['verified', 'approved'].includes(exp.status))
         .reduce((sum, exp) => sum + (exp.totalAmount || 0), 0),
 
       // 5. Approved Amount (Only Approved or Finalized)
@@ -411,9 +416,12 @@ const getDashboardReport = async (req, res) => {
       consolidated.dailyDepartmentBreakdown[deptName] = (consolidated.dailyDepartmentBreakdown[deptName] || 0) + (exp.totalAmount || 0);
     });
 
-    // Calculate utilization percentage
+    // Calculate utilization percentage based on actual SPENT (finalized) 
+    // This matches the Principal's requirement for "correct" utilization
     if (consolidated.totalAllocated > 0) {
-      consolidated.utilizationPercentage = (consolidated.totalUtilized / consolidated.totalAllocated) * 100;
+      consolidated.utilizationPercentage = (consolidated.totalSpent / consolidated.totalAllocated) * 100;
+      // Also keep a "Committed Utilization" if needed, but the primary is now finalized-only
+      consolidated.committedUtilizationPercentage = (consolidated.totalUtilized / consolidated.totalAllocated) * 100;
     }
 
     // Department breakdown
@@ -834,8 +842,8 @@ const generateExpenditureCSV = (expenditures) => {
     'Event Type',
     'Event Date',
     'Total Amount',
-    'Bill Number(s)',
-    'Vendor(s)',
+    'Bill Number',
+    'Vendor',
     'Department',
     'Budget Head',
     'Status',
@@ -844,25 +852,46 @@ const generateExpenditureCSV = (expenditures) => {
     'Created At'
   ];
 
-  const rows = expenditures.map(exp => {
-    const billNumbers = exp.expenseItems?.map(item => item.billNumber).join('; ') || '';
-    const vendors = exp.expenseItems?.map(item => item.vendorName).join('; ') || '';
+  const rows = [];
+  expenditures.forEach(exp => {
     const date = exp.eventDate || exp.createdAt;
-
-    return [
-      exp.eventName || 'N/A',
-      exp.eventType || 'N/A',
-      date ? new Date(date).toISOString().split('T')[0] : 'N/A',
-      exp.totalAmount || 0,
-      billNumbers,
-      vendors,
-      exp.department?.name || 'N/A',
-      exp.budgetHead?.name || 'N/A',
-      exp.status || 'N/A',
-      exp.submittedBy?.name || 'N/A',
-      exp.financialYear || 'N/A',
-      exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
-    ];
+    const formattedDate = date ? new Date(date).toISOString().split('T')[0] : 'N/A';
+    
+    if (exp.expenseItems && exp.expenseItems.length > 0) {
+      exp.expenseItems.forEach(item => {
+        const attachmentLinks = (item.attachments || []).map(a => a.url).join('; ');
+        rows.push([
+          exp.eventName || 'N/A',
+          exp.eventType || 'N/A',
+          formattedDate,
+          item.amount || 0,
+          item.billNumber || 'N/A',
+          item.vendorName || 'N/A',
+          exp.department?.name || 'N/A',
+          (item.budgetHead?.name || exp.budgetHead?.name) || 'N/A',
+          exp.status || 'N/A',
+          exp.submittedBy?.name || 'N/A',
+          exp.financialYear || 'N/A',
+          exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
+        ]);
+      });
+    } else {
+      // Fallback for expenditures without detailed items
+      rows.push([
+        exp.eventName || 'N/A',
+        exp.eventType || 'N/A',
+        formattedDate,
+        exp.totalAmount || 0,
+        'N/A',
+        'N/A',
+        exp.department?.name || 'N/A',
+        exp.budgetHead?.name || 'N/A',
+        exp.status || 'N/A',
+        exp.submittedBy?.name || 'N/A',
+        exp.financialYear || 'N/A',
+        exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
+      ]);
+    }
   });
 
   return [headers, ...rows].map(row =>

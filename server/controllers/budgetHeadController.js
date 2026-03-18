@@ -6,7 +6,7 @@ const { recordAuditLog } = require('../utils/auditService');
 // @access  Private/Admin
 const getBudgetHeads = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, category, isActive, department } = req.query;
+    const { page = 1, limit = 100, search, category, isActive, department } = req.query;
     const conditions = [];
 
     if (search) {
@@ -108,11 +108,17 @@ const createBudgetHead = async (req, res) => {
       });
     }
 
+    // If code is not provided, generate one from name
+    let finalCode = code;
+    if (!finalCode && name) {
+      finalCode = name.substring(0, 3).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
+    }
+
     const budgetHead = await BudgetHead.create({
       name,
-      code,
+      code: finalCode,
       description,
-      category,
+      category: category || 'other',
       createdBy: req.user._id
     });
 

@@ -85,7 +85,7 @@ async function seedAllUsers() {
             {
                 name: 'Dr. Vice Principal',
                 email: 'vp@bms.com',
-                password: 'vp123',
+                password: 'vp1234',
                 role: 'vice_principal',
                 permissions: { canApprove: true, exportReports: true }
             },
@@ -182,7 +182,7 @@ async function seedAllUsers() {
         console.log('| Admin            | admin@bms.com        | admin123     |');
         console.log('| Office           | office@bms.com       | office123    |');
         console.log('| Principal        | principal@bms.com    | principal123 |');
-        console.log('| Vice Principal   | vp@bms.com           | vp123        |');
+        console.log('| Vice Principal   | vp@bms.com           | vp1234       |');
         console.log('| Auditor          | auditor@bms.com      | auditor123   |');
         console.log('');
         console.log('See HOD and Dept User emails based on department codes:');

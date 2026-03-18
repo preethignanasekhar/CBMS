@@ -456,39 +456,7 @@ export const BudgetHeadForm = () => {
                                 </div>
                             </div>
 
-                            <div className="form-group">
-                                <label className="form-label">Budget Head Code *</label>
-                                <div className="input-with-icon">
-                                    <span className="input-icon-wrapper"><Hash size={16} /></span>
-                                    <input
-                                        type="text"
-                                        name="code"
-                                        value={formData.code}
-                                        onChange={handleChange}
-                                        required
-                                        className="form-input has-icon"
-                                        placeholder="e.g., AD-PUB"
-                                        style={{ textTransform: 'uppercase' }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Category *</label>
-                                <select
-                                    name="category"
-                                    value={formData.category}
-                                    onChange={handleChange}
-                                    required
-                                    className="form-input"
-                                >
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            {/* Category and Code are now handled automatically or optional */}
 
                             <div className="form-group full-width">
                                 <label className="form-label">Description</label>
@@ -592,7 +560,7 @@ export const BudgetHeads = () => {
             if (filters.category) params.category = filters.category;
             if (filters.isActive) params.isActive = filters.isActive;
 
-            const response = await budgetHeadsAPI.getBudgetHeads(params);
+            const response = await budgetHeadsAPI.getBudgetHeads({ ...params, limit: 1000 });
             setBudgetHeads(response.data.data.budgetHeads);
             setError(null);
         } catch (err) {
@@ -652,11 +620,24 @@ export const BudgetHeads = () => {
                 title="Budget Heads Management"
                 subtitle="Manage and allocate budget categories"
             >
-                {canManage && (
-                    <Link to="/budget-heads/add" className="btn btn-primary">
-                        <Plus size={18} /> Add Budget Head
-                    </Link>
-                )}
+                <div className="header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                        onClick={() => {
+                            fetchBudgetHeads();
+                            fetchStats();
+                            fetchCategories();
+                        }}
+                        className="btn btn-outline"
+                        title="Refresh List"
+                    >
+                        <RefreshCw size={18} />
+                    </button>
+                    {canManage && (
+                        <Link to="/budget-heads/add" className="btn btn-primary">
+                            <Plus size={18} /> Add Budget Head
+                        </Link>
+                    )}
+                </div>
             </PageHeader>
 
             {error && <div className="error-message">{error}</div>}
@@ -698,7 +679,6 @@ export const BudgetHeads = () => {
                         <div className="card-header">
                             <div className="head-info">
                                 <h3 className="head-name">{head.name}</h3>
-                                <span className="head-code">{head.code}</span>
                             </div>
                             <div className="head-status">
                                 <span className={`status ${head.isActive ? 'active' : 'inactive'}`}>
@@ -707,16 +687,7 @@ export const BudgetHeads = () => {
                             </div>
                         </div>
 
-                        <div className="card-body">
-                            <div className="head-category">
-                                <span
-                                    className="category-badge"
-                                    style={{ backgroundColor: getCategoryColor(head.category) }}
-                                >
-                                    {head.category.toUpperCase()}
-                                </span>
-                            </div>
-                        </div>
+                        {/* Category removed as per request */}
 
                         <div className="card-actions" onClick={(e) => e.stopPropagation()}>
                             {canManage && (
@@ -787,7 +758,23 @@ export const BudgetProposalForm = () => {
     const [lastRefreshed, setLastRefreshed] = useState(new Date());
     const [showApprovalModal, setShowApprovalModal] = useState(false);
     const [allDepartmentsStats, setAllDepartmentsStats] = useState([]);
+    const [showHistory, setShowHistory] = useState(false);
     const [loadingStats, setLoadingStats] = useState(false);
+    const [stats, setStats] = useState(null);
+
+    const calculateMonthlyTotals = () => {
+        const totals = { 
+            apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0, oct: 0, nov: 0, dec: 0, jan: 0, feb: 0, mar: 0 
+        };
+        formData.proposalItems.forEach(item => {
+            if (item.monthlyBreakdown) {
+                Object.keys(totals).forEach(month => {
+                    totals[month] += (parseFloat(item.monthlyBreakdown[month]) || 0);
+                });
+            }
+        });
+        return totals;
+    };
     const [formData, setFormData] = useState({
         financialYear: '2025-2026',
         department: user?.department?._id || user?.department || '',
@@ -799,10 +786,15 @@ export const BudgetProposalForm = () => {
             previousYearUtilization: '',
             prevYearAllocated: 0,
             prevYearSpent: 0,
-            currentYearSpent: 0
+            currentYearSpent: 0,
+            monthlyBreakdown: {
+                apr: '', may: '', jun: '', jul: '', aug: '', sep: '', oct: '', nov: '', dec: '', jan: '', feb: '', mar: ''
+            }
         }],
         notes: ''
     });
+    const [existingProposals, setExistingProposals] = useState([]);
+
 
     const fetchBudgetStats = useCallback(async (budgetHeadId, departmentId, itemIndex) => {
         try {
@@ -922,38 +914,36 @@ export const BudgetProposalForm = () => {
         fetchDepartments();
     }, []);
 
+    const fetchExistingProposals = useCallback(async (deptId, year) => {
+        try {
+            const response = await budgetProposalAPI.getBudgetProposals({
+                department: deptId,
+                financialYear: year,
+                status: 'submitted,verified_by_hod,verified_by_principal,verified,approved'
+            });
+            setExistingProposals(response.data.data.proposals);
+        } catch (err) {
+            console.error('Error fetching existing proposals:', err);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (formData.department && formData.financialYear) {
+            fetchExistingProposals(formData.department, formData.financialYear);
+        }
+    }, [formData.department, formData.financialYear, fetchExistingProposals]);
+
     useEffect(() => {
         if (formData.department && !isEditMode) {
             fetchBudgetHeads(formData.department);
         }
     }, [formData.department, isEditMode]);
 
+
     // (moved) Auto-refresh hook will be defined after refreshAllStats to avoid temporal-deadzone
 
-    useEffect(() => {
-        if (!isEditMode && location.state) {
-            const { eventName, selectedItems } = location.state;
-            if (eventName || (selectedItems && selectedItems.length > 0)) {
-                let newNotes = formData.notes || '';
+    // AI tested data loading removed as requested to avoid value inconsistencies 
 
-                if (eventName) {
-                    newNotes = `Event: ${eventName}\n${newNotes}`;
-                }
-
-                if (selectedItems && selectedItems.length > 0) {
-                    const checklistText = `\nAI Suggested Requirements:\n- ${selectedItems.join('\n- ')}`;
-                    newNotes += checklistText;
-                }
-
-                setFormData(prev => ({
-                    ...prev,
-                    notes: newNotes
-                }));
-
-                setSuccess(`AI data for "${eventName || 'the event'}" loaded successfully.`);
-            }
-        }
-    }, [location.state, isEditMode]);
 
     useEffect(() => {
         if (isEditMode) {
@@ -974,7 +964,10 @@ export const BudgetProposalForm = () => {
                         budgetHead: item.budgetHead?._id || item.budgetHead,
                         proposedAmount: item.proposedAmount,
                         justification: item.justification,
-                        previousYearUtilization: item.previousYearUtilization || 0
+                        previousYearUtilization: item.previousYearUtilization || 0,
+                        monthlyBreakdown: item.monthlyBreakdown || {
+                            apr: '', may: '', jun: '', jul: '', aug: '', sep: '', oct: '', nov: '', dec: '', jan: '', feb: '', mar: ''
+                        }
                     }));
 
                     setFormData({
@@ -1100,23 +1093,78 @@ export const BudgetProposalForm = () => {
         }
     };
 
-    const handleItemChange = (index, field, value) => {
-        const newItems = [...formData.proposalItems];
-        newItems[index] = {
-            ...newItems[index],
-            [field]: value
-        };
+    const handleMonthlyChange = (itemIndex, month, value) => {
+        setFormData(prev => {
+            const newItems = [...prev.proposalItems];
+            const currentItem = { ...newItems[itemIndex] };
+            
+            const newMonthlyBreakdown = {
+                ...currentItem.monthlyBreakdown,
+                [month]: value // Keep as string or number from input
+            };
+            
+            // Calculate new total for this item
+            const newTotal = Object.values(newMonthlyBreakdown).reduce((sum, val) => {
+                return sum + (parseFloat(val) || 0);
+            }, 0);
+            
+            newItems[itemIndex] = {
+                ...currentItem,
+                monthlyBreakdown: newMonthlyBreakdown,
+                proposedAmount: newTotal.toFixed(2) // Keep as string for better input handling
+            };
 
-        // Auto-fetch budget stats if budget head is selected
-        if (field === 'budgetHead' && value && formData.department) {
-            fetchBudgetStats(value, formData.department, index);
+            return {
+                ...prev,
+                proposalItems: newItems
+            };
+        });
+    };
+
+    const handleItemChange = (index, field, value) => {
+        if (field === 'budgetHead' && value) {
+            // Check if this head is already in ANOTHER existing proposal (exclude current one if editing)
+            const isAlreadyProposed = existingProposals.some(p => 
+                p._id !== id && 
+                p.proposalItems.some(item => (item.budgetHead?._id || item.budgetHead) === value)
+            );
+
+            if (isAlreadyProposed) {
+                const headName = budgetHeads.find(h => h._id === value)?.name || 'This Budget Head';
+                setError(`${headName} has already been proposed for this financial year.`);
+                return;
+            }
+
+            // Also check for duplicates within the current form items
+            const isDuplicateInForm = formData.proposalItems.some((item, i) => i !== index && item.budgetHead === value);
+            if (isDuplicateInForm) {
+                setError('Matching budget head already exists in this proposal. Please combine them or choose a different head.');
+                return;
+            }
+
+            // Clear error if selection is now valid
+            setError(null);
         }
 
-        setFormData(prev => ({
-            ...prev,
-            proposalItems: newItems
-        }));
+        setFormData(prev => {
+            const newItems = [...prev.proposalItems];
+            newItems[index] = {
+                ...newItems[index],
+                [field]: value
+            };
+
+            // Auto-fetch budget stats if budget head is selected
+            if (field === 'budgetHead' && value && prev.department) {
+                fetchBudgetStats(value, prev.department, index);
+            }
+
+            return {
+                ...prev,
+                proposalItems: newItems
+            };
+        });
     };
+
 
     // Use a ref for the refresh function to keep the interval stable across renders
     const refreshAllStatsRef = useRef(refreshAllStats);
@@ -1180,19 +1228,25 @@ export const BudgetProposalForm = () => {
                     previousYearUtilization: '',
                     prevYearAllocated: 0,
                     prevYearSpent: 0,
-                    currentYearSpent: 0
+                    currentYearSpent: 0,
+                    monthlyBreakdown: {
+                        apr: '', may: '', jun: '', jul: '', aug: '', sep: '', oct: '', nov: '', dec: '', jan: '', feb: '', mar: ''
+                    }
                 }
             ]
         }));
     };
 
     const removeItem = (index) => {
-        if (formData.proposalItems.length > 1) {
-            setFormData(prev => ({
-                ...prev,
-                proposalItems: prev.proposalItems.filter((_, i) => i !== index)
-            }));
-        }
+        setFormData(prev => {
+            if (prev.proposalItems.length > 1) {
+                return {
+                    ...prev,
+                    proposalItems: prev.proposalItems.filter((_, i) => i !== index)
+                };
+            }
+            return prev;
+        });
     };
 
     const handleSubmit = async (e, status = 'draft') => {
@@ -1215,8 +1269,19 @@ export const BudgetProposalForm = () => {
                     setLoading(false);
                     return;
                 }
-                if (item.proposedAmount === '' || item.proposedAmount === undefined || item.proposedAmount === null) {
-                    setError(`Please enter a Proposed Amount for Item ${i + 1}`);
+
+                // Monthly Expenditure Validation
+                const months = ['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar'];
+                const hasMonthlyExpenditure = months.some(m => parseFloat(item.monthlyBreakdown[m] || 0) > 0);
+
+                if (!hasMonthlyExpenditure) {
+                    setError(`Please enter expenditure in at least one month before submitting the budget proposal for Item ${i + 1}.`);
+                    setLoading(false);
+                    return;
+                }
+
+                if (item.proposedAmount === '' || item.proposedAmount === undefined || item.proposedAmount === null || parseFloat(item.proposedAmount) <= 0) {
+                    setError(`Please enter a valid Proposed Amount for Item ${i + 1}`);
                     setLoading(false);
                     return;
                 }
@@ -1230,12 +1295,20 @@ export const BudgetProposalForm = () => {
             const submitData = {
                 financialYear: formData.financialYear,
                 department: formData.department,
-                proposalItems: formData.proposalItems.map(item => ({
-                    budgetHead: item.budgetHead,
-                    proposedAmount: parseFloat(item.proposedAmount),
-                    justification: item.justification,
-                    previousYearUtilization: parseFloat(item.previousYearUtilization) || 0
-                })),
+                proposalItems: formData.proposalItems.map(item => {
+                    const cleanMonthlyBreakdown = {};
+                    ['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar'].forEach(m => {
+                        cleanMonthlyBreakdown[m] = parseFloat(item.monthlyBreakdown[m]) || 0;
+                    });
+
+                    return {
+                        budgetHead: item.budgetHead,
+                        proposedAmount: parseFloat(item.proposedAmount),
+                        justification: item.justification,
+                        previousYearUtilization: parseFloat(item.previousYearUtilization) || 0,
+                        monthlyBreakdown: cleanMonthlyBreakdown
+                    };
+                }),
                 notes: formData.notes,
                 status: status
             };
@@ -1418,158 +1491,167 @@ export const BudgetProposalForm = () => {
                             </div>
                         </div>
 
-                        <div className="form-section">
-                            <div className="section-header">
-                                <h3>Proposal Items</h3>
-                                <button
-                                    type="button"
-                                    className="btn btn-sm btn-primary"
-                                    onClick={addItem}
-                                >
-                                    <Plus size={16} /> Add Item
-                                </button>
-                            </div>
+                                <div className="form-section">
+                                <div className="section-header">
+                                    <h3>Proposal Items</h3>
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm btn-primary"
+                                        onClick={addItem}
+                                    >
+                                        <Plus size={16} /> Add Item
+                                    </button>
+                                </div>
 
-                            {formData.proposalItems.map((item, index) => (
-                                <div key={index} className="proposal-item">
-                                    <div className="item-header">
-                                        <h4>Item {index + 1}</h4>
-                                        {formData.proposalItems.length > 1 && (
-                                            <button
-                                                type="button"
-                                                className="btn btn-sm btn-danger"
-                                                onClick={() => removeItem(index)}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="form-row">
-                                        <div className="form-group">
-                                            <label>Budget Head <span className="required">*</span></label>
-                                            <select
-                                                value={item.budgetHead}
-                                                onChange={(e) => handleItemChange(index, 'budgetHead', e.target.value)}
-                                                required
-                                                disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                            >
-                                                <option value="">Select Budget Head</option>
-                                                {budgetHeads.map(head => (
-                                                    <option key={head._id} value={head._id}>
-                                                        {head.name} ({head.category})
-                                                    </option>
-                                                ))}
-                                            </select>
+                                {formData.proposalItems.map((item, index) => (
+                                    <div key={index} className="proposal-item">
+                                        <div className="item-header">
+                                            <h4>Item {index + 1}</h4>
+                                            {formData.proposalItems.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-danger"
+                                                    onClick={() => removeItem(index)}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
                                         </div>
 
-                                        <div className="form-group">
-                                            <label>Proposed Amount (₹) <span className="required">*</span></label>
-                                            <input
-                                                type="number"
-                                                value={item.proposedAmount}
-                                                onChange={(e) => handleItemChange(index, 'proposedAmount', e.target.value)}
-                                                placeholder="0"
-                                                min="0"
-                                                step="0.01"
-                                                required
-                                                disabled={isEditMode && !['draft', 'revised', 'approved'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                            />
-                                        </div>
-
-                                        <div className="form-group stats-group" style={{ flex: '1 1 100%', marginTop: '0.5rem' }}>
-                                            <div className="expenditure-stats" style={{
-                                                display: 'grid',
-                                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                                gap: '1rem',
-                                                padding: '1rem',
-                                                background: 'rgba(var(--primary-rgb), 0.03)',
-                                                border: '1px border var(--border-color)',
-                                                borderRadius: '8px',
-                                                fontSize: '0.9rem'
-                                            }}>
-                                                <div className="stat-item">
-                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                        Prev. Year Allocated Amount
-                                                    </label>
-                                                    <span style={{ fontWeight: '600', color: 'var(--primary)', fontSize: '1rem' }}>
-                                                        ₹{(item.prevYearAllocated || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
-                                                <div className="stat-item">
-                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                        Prev. Year Spent Amount
-                                                    </label>
-                                                    <span style={{ fontWeight: '600', color: 'var(--danger)', fontSize: '1rem' }}>
-                                                        ₹{(item.prevYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
-                                                <div className="stat-item">
-                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                        Prev. Year Balance (Remaining)
-                                                    </label>
-                                                    <span style={{ fontWeight: '600', color: 'var(--success)', fontSize: '1rem' }}>
-                                                        ₹{(((item.prevYearAllocated || 0) - (item.prevYearSpent || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
-                                                <div className="stat-item">
-                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                        Current Year Spent Amount (Department)
-                                                    </label>
-                                                    <span style={{ fontWeight: '600', color: 'var(--warning)', fontSize: '1rem' }}>
-                                                        ₹{(item.currentYearSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
-                                                <div className="stat-item">
-                                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '500' }}>
-                                                        Prev. Year Utilization (To be saved)
-                                                    </label>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span style={{ color: 'var(--text-secondary)' }}>₹</span>
-                                                        <input
-                                                            type="number"
-                                                            value={item.previousYearUtilization}
-                                                            onChange={(e) => handleItemChange(index, 'previousYearUtilization', e.target.value)}
-                                                            placeholder="0"
-                                                            min="0"
-                                                            step="0.01"
-                                                            disabled={['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                                            style={{
-                                                                height: '32px',
-                                                                padding: '4px 8px',
-                                                                width: '120px',
-                                                                border: '1px solid var(--border-color)',
-                                                                borderRadius: '4px',
-                                                                opacity: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 0.6 : 1,
-                                                                cursor: ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? 'not-allowed' : 'auto'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: '1 1 100%' }}>
+                                                <label>Budget Head <span className="required">*</span></label>
+                                                <select
+                                                    value={item.budgetHead}
+                                                    onChange={(e) => handleItemChange(index, 'budgetHead', e.target.value)}
+                                                    required
+                                                    disabled={isEditMode && !['draft', 'revised', 'approved', 'rejected', 'submitted'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                                >
+                                                    <option value="">Select Budget Head</option>
+                                                    {budgetHeads.map(head => (
+                                                        <option key={head._id} value={head._id}>
+                                                            {head.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div className="form-group">
-                                        <label>Justification <span className="required">*</span></label>
-                                        <textarea
-                                            value={item.justification}
-                                            onChange={(e) => handleItemChange(index, 'justification', e.target.value)}
-                                            placeholder="Explain why this budget is needed"
-                                            rows="3"
-                                            required
-                                            disabled={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
-                                            style={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
-                                        />
+                                        <div className="monthly-breakdown-section" style={{ 
+                                            marginTop: '1.5rem', 
+                                            marginBottom: '1.5rem',
+                                            padding: '1.5rem',
+                                            background: '#f8fafc',
+                                            borderRadius: '12px',
+                                            border: '1px solid #e2e8f0'
+                                        }}>
+                                            <label style={{ 
+                                                fontWeight: '700', 
+                                                marginBottom: '12px', 
+                                                display: 'flex', 
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                color: 'var(--primary)',
+                                                fontSize: '0.95rem'
+                                            }}>
+                                                <Calendar size={18} /> Monthly Expenditure Plan (Estimated)
+                                            </label>
+                                            <div style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
+                                                gap: '15px'
+                                            }}>
+                                                {['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar'].map(month => (
+                                                    <div key={month} className="month-input-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                        <label style={{ 
+                                                            fontSize: '0.7rem', 
+                                                            textTransform: 'uppercase', 
+                                                            color: '#64748b', 
+                                                            fontWeight: '800', 
+                                                            letterSpacing: '0.05em' 
+                                                        }}>{month}</label>
+                                                        <input
+                                                            type="number"
+                                                            value={item.monthlyBreakdown[month]}
+                                                            onChange={(e) => handleMonthlyChange(index, month, e.target.value)}
+                                                            placeholder="0"
+                                                            min="0"
+                                                            style={{ 
+                                                                padding: '10px', 
+                                                                fontSize: '0.9rem', 
+                                                                borderRadius: '8px', 
+                                                                border: '1px solid #cbd5e1',
+                                                                width: '100%',
+                                                                textAlign: 'right',
+                                                                background: 'white',
+                                                                transition: 'border-color 0.2s'
+                                                            }}
+                                                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                                                            onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <p style={{ margin: '12px 0 0 0', color: '#64748b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <AlertCircle size={14} /> 
+                                                Entering monthly values will automatically update the total Proposed Amount below.
+                                            </p>
+                                        </div>
+
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label>Proposed Amount (₹) <span className="required">*</span></label>
+                                                <input
+                                                    type="number"
+                                                    value={item.proposedAmount}
+                                                    onChange={(e) => handleItemChange(index, 'proposedAmount', e.target.value)}
+                                                    placeholder="0"
+                                                    min="0"
+                                                    step="0.01"
+                                                    required
+                                                    disabled={isEditMode && !['draft', 'revised', 'approved', 'rejected', 'submitted'].includes(formData.status) && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>Justification <span className="required">*</span></label>
+                                            <textarea
+                                                value={item.justification}
+                                                onChange={(e) => handleItemChange(index, 'justification', e.target.value)}
+                                                placeholder="Explain why this budget is needed"
+                                                rows="3"
+                                                required
+                                                disabled={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role)}
+                                                style={isEditMode && ['hod', 'office', 'vice_principal', 'principal'].includes(user?.role) ? { opacity: 0.6 } : {}}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
 
                             <div className="total-proposed">
                                 <strong>Total Proposed Amount: ₹{getTotalProposedAmount().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                             </div>
-                        </div>
 
+                            {/* Monthly Totals Summary (Sum Data) */}
+                            <div className="mt-4 p-4 rounded-xl border-2 border-dashed border-slate-200">
+                                <div className="flex items-center gap-2 mb-3 text-slate-700 font-bold uppercase text-xs tracking-wider">
+                                    <TrendingUp size={16} className="text-primary" /> Monthly Sum Data (Consolidated)
+                                </div>
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                                    gap: '12px' 
+                                }}>
+                                    {Object.entries(calculateMonthlyTotals()).map(([month, total]) => (
+                                        <div key={month} className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                            <div className="text-[10px] text-slate-500 font-black uppercase">{month}</div>
+                                            <div className="text-sm font-bold text-slate-800">₹{total.toLocaleString('en-IN')}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                         <div className="form-actions">
                             <button
                                 type="button"
@@ -1616,22 +1698,22 @@ export const BudgetProposalForm = () => {
                                             <ShieldCheck size={18} /> Verify Proposal
                                         </button>
                                     )}
-                                    {['principal', 'vice_principal'].includes(user?.role) && formData.status === 'verified' && (
+                                    {['principal', 'vice_principal'].includes(user?.role) && ['verified_by_hod', 'verified'].includes(formData.status) && (
                                         <button
                                             type="button"
                                             className="btn btn-primary"
                                             onClick={async () => {
-                                                if (window.confirm('Are you sure you want to verify and accept this proposal?')) {
-                                                    await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified & Accepted from detail view' });
+                                                if (window.confirm('Are you sure you want to verify and accept this proposal in principle?')) {
+                                                    await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified & Accepted in principle from detail view' });
                                                     navigate('/budget-proposals');
                                                 }
                                             }}
                                             style={{ color: 'white' }}
                                         >
-                                            <ShieldCheck size={18} /> Verify & Accept
+                                            <ShieldCheck size={18} /> Verify & Accept (In Principle)
                                         </button>
                                     )}
-                                    {user?.role === 'office' && formData.status === 'verified' && (
+                                    {user?.role === 'office' && ['verified_by_principal', 'verified'].includes(formData.status) && (
                                         <button
                                             type="button"
                                             className="btn btn-success"
@@ -1644,6 +1726,22 @@ export const BudgetProposalForm = () => {
                                             style={{ color: 'white' }}
                                         >
                                             <Check size={18} /> Allocate & Approve
+                                        </button>
+                                    )}
+                                    {/* Additional Verify & Accept for Office if requested to be "like hod" */}
+                                    {user?.role === 'office' && (formData.status === 'verified_by_hod') && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-info"
+                                            onClick={async () => {
+                                                if (window.confirm('Are you sure you want to verify and accept this proposal in principle?')) {
+                                                    await budgetProposalAPI.verifyBudgetProposal(id, { remarks: 'Verified & Accepted in principle by Office' });
+                                                    navigate('/budget-proposals');
+                                                }
+                                            }}
+                                            style={{ color: 'white' }}
+                                        >
+                                            <ShieldCheck size={18} /> Verify & Accept (In Principle)
                                         </button>
                                     )}
                                 </>
@@ -1760,8 +1858,6 @@ export const BudgetProposalForm = () => {
                         )}
                     </form>
                 </div>
-
-
             </div>
         </div>
     );
@@ -1789,7 +1885,8 @@ export const BudgetProposals = () => {
             setProposals(response.data.data.proposals);
             setError(null);
         } catch (err) {
-            setError('Failed to fetch budget proposals');
+            const errorMsg = err.response?.data?.message || err.message || 'Failed to fetch budget proposals';
+            setError(errorMsg);
             console.error('Error fetching proposals:', err);
         } finally {
             setLoading(false);
@@ -1890,23 +1987,10 @@ export const BudgetProposals = () => {
         }
     };
 
-    const handleResubmitProposal = async (id) => {
-        if (!window.confirm('Do you want to create a new draft from this rejected proposal? This will allow you to make corrections and resubmit.')) {
-            return;
-        }
+    // The handleResubmitProposal function is being removed as per requested rule:
+    // "If the proposal status is Rejected, the user should be allowed to edit the existing proposal and resubmit it, instead of creating a new one."
+    // Users will now just use the Edit button.
 
-        try {
-            setLoading(true);
-            await budgetProposalAPI.resubmitBudgetProposal(id);
-            setError(null);
-            fetchProposals();
-            fetchStats();
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to resubmit proposal');
-            console.error('Error resubmitting proposal:', err);
-            setLoading(false);
-        }
-    };
 
     const getStatusColor = (status) => {
         const colors = {
@@ -2055,14 +2139,14 @@ export const BudgetProposals = () => {
                                 <tr key={proposal._id}>
                                     <td>
                                         <div className="dept-info">
-                                            <div className="dept-name">{proposal.department.name}</div>
-                                            <div className="dept-code">{proposal.department.code}</div>
+                                            <div className="dept-name">{proposal.department?.name || 'N/A'}</div>
+                                            <div className="dept-code">{proposal.department?.code || proposal.department || 'N/A'}</div>
                                         </div>
                                     </td>
                                     <td>{proposal.financialYear}</td>
                                     <td>
                                         <span className="amount">
-                                            ₹{proposal.totalProposedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            ₹{(proposal.totalProposedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </span>
                                     </td>
                                     <td>
@@ -2091,7 +2175,7 @@ export const BudgetProposals = () => {
                                                     <Eye size={16} />
                                                 </Link>
                                             </Tooltip>
-                                            {(proposal.status === 'draft' || proposal.status === 'revised' || proposal.status === 'approved') && (
+                                            {(proposal.status === 'draft' || proposal.status === 'revised' || proposal.status === 'approved' || proposal.status === 'rejected' || proposal.status === 'submitted') && (
                                                 <>
                                                     <Tooltip text="Edit Proposal" position="top">
                                                         <Link
@@ -2114,17 +2198,7 @@ export const BudgetProposals = () => {
                                                     </button>
                                                 </Tooltip>
                                             )}
-                                            {proposal.status === 'rejected' && (
-                                                <Tooltip text="Resubmit (Copy to Draft)" position="top">
-                                                    <button
-                                                        onClick={() => handleResubmitProposal(proposal._id)}
-                                                        className="btn btn-sm btn-warning"
-                                                        style={{ color: 'white', backgroundColor: '#fd7e14', borderColor: '#fd7e14' }}
-                                                    >
-                                                        <RefreshCcw size={16} />
-                                                    </button>
-                                                </Tooltip>
-                                            )}
+
                                             {proposal.status === 'submitted' && user?.role === 'hod' && (
                                                 <Tooltip text="Verify Proposal" position="top">
                                                     <button
@@ -2235,315 +2309,7 @@ export const BudgetProposals = () => {
         </div>
     );
 };
-export const BudgetUtilizationDashboard = () => {
-    const [dashboard, setDashboard] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [financialYear, setFinancialYear] = useState('2025-2026');
 
-    const COLORS = ['#28a745', '#17a2b8', '#ffc107', '#fd7e14', '#dc3545'];
-    const UTILIZATION_RANGES = ['0-25', '25-50', '50-75', '75-90', '90+'];
-
-    const fetchDashboard = useCallback(async () => {
-        try {
-            setLoading(true);
-            const response = await reportAPI.getBudgetUtilizationDashboard({ financialYear });
-            setDashboard(response.data.data);
-            setError(null);
-        } catch (err) {
-            setError('Failed to fetch budget utilization dashboard');
-            console.error('Error fetching dashboard:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [financialYear]);
-
-    useEffect(() => {
-        fetchDashboard();
-    }, [fetchDashboard]);
-
-    const handleYearChange = (e) => {
-        setFinancialYear(e.target.value);
-    };
-
-    const getUtilizationData = () => {
-        if (!dashboard) return [];
-        return UTILIZATION_RANGES.map(range => ({
-            range: `${range}%`,
-            count: dashboard.utilizationRanges[range].count,
-            totalAllocated: dashboard.utilizationRanges[range].totalAllocated
-        }));
-    };
-
-    const getDepartmentData = () => {
-        if (!dashboard) return [];
-        // Sort by total allocated and take 11 departments as requested
-        return dashboard.departmentWiseUtilization.sort((a, b) => b.totalAllocated - a.totalAllocated).slice(0, 11);
-    };
-
-    const getStatusColor = (percentage) => {
-        if (percentage >= 90) return '#dc3545';
-        if (percentage >= 75) return '#ffc107';
-        if (percentage >= 50) return '#17a2b8';
-        return '#28a745';
-    };
-
-    if (loading) {
-        return (
-            <div className="budget-utilization-dashboard">
-                <div className="loading">Loading budget utilization dashboard...</div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="budget-utilization-dashboard">
-            <PageHeader
-                title="Budget Utilization Dashboard"
-                subtitle="Real-time budget utilization monitoring across departments"
-            />
-
-            {error && <div className="error-message">{error}</div>}
-
-            <div className="filters-section">
-                <div className="form-group">
-                    <label>Financial Year</label>
-                    <input
-                        type="text"
-                        value={financialYear}
-                        onChange={handleYearChange}
-                        placeholder="e.g., 2025-2026"
-                    />
-                </div>
-            </div>
-
-            {dashboard && (
-                <>
-                    {/* Key Metrics */}
-                    <div className="stats-grid">
-                        <StatCard
-                            title="Total Departments"
-                            value={dashboard.totalDepartments}
-                            icon={<TrendingUp size={24} />}
-                            color="var(--primary)"
-                        />
-                        <StatCard
-                            title="Total Expenditure (FY)"
-                            value={`₹${dashboard.departmentWiseUtilization.reduce((sum, d) => sum + d.totalSpent, 0).toLocaleString('en-IN')}`}
-                            icon={<IndianRupee size={24} />}
-                            color="#17a2b8"
-                        />
-                        <StatCard
-                            title="Today's Expenditure"
-                            value={`₹${dashboard.dailyTotal.toLocaleString('en-IN')}`}
-                            subtitle={new Date().toLocaleDateString('en-IN')}
-                            icon={<Clock size={24} />}
-                            color="#6f42c1"
-                        />
-                        <StatCard
-                            title="High Utilization (≥90%)"
-                            value={dashboard.departmentsWithHighUtilization}
-                            subtitle="Requires attention"
-                            icon={<AlertCircle size={24} />}
-                            color="var(--danger)"
-                        />
-                        <StatCard
-                            title="Low Utilization (<50%)"
-                            value={dashboard.departmentsWithLowUtilization}
-                            subtitle="Underutilized budgets"
-                            icon={<TrendingDown size={24} />}
-                            color="var(--warning)"
-                        />
-                    </div>
-
-                    {/* Today's Breakdown Section */}
-                    {dashboard.dailyTotal > 0 && (
-                        <div className="report-section daily-breakdown">
-                            <div className="section-header">
-                                <h3 className="flex items-center gap-2">
-                                    <Clock size={20} /> Today's Expenditure Breakdown
-                                </h3>
-                                <span className="total-badge">Total: ₹{dashboard.dailyTotal.toLocaleString('en-IN')}</span>
-                            </div>
-                            <div className="daily-stats-grid">
-                                {Object.entries(dashboard.dailyDepartmentWise).map(([dept, amount]) => (
-                                    <div key={dept} className="daily-dept-card">
-                                        <div className="dept-name">{dept}</div>
-                                        <div className="dept-amount">₹{amount.toLocaleString('en-IN')}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Charts Section */}
-                    <div className="charts-section single-chart">
-                        <div className="chart-container full-width">
-                            <h3 className="text-center mb-4">Departmental Budget: Requested vs Spent Amount</h3>
-                            <ResponsiveContainer width="100%" height={500}>
-                                <BarChart data={getDepartmentData()} margin={{ top: 20, right: 60, left: 80, bottom: 60 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                    <XAxis
-                                        dataKey="code"
-                                        interval={0}
-                                        angle={-45}
-                                        textAnchor="end"
-                                        height={60}
-                                        stroke="#94a3b8"
-                                        tick={{ fill: '#64748b', fontSize: 12, dy: 5 }}
-                                    />
-                                    <YAxis
-                                        stroke="#94a3b8"
-                                        tick={{ fill: '#64748b', fontSize: 12 }}
-                                        tickFormatter={(value) => `₹${(value / 100000).toFixed(1)}L`}
-                                    />
-                                    <RechartsTooltip
-                                        formatter={(value) => `₹${value.toLocaleString('en-IN')}`}
-                                        contentStyle={{
-                                            borderRadius: '12px',
-                                            border: 'none',
-                                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                                            padding: '12px',
-                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                            backdropFilter: 'blur(4px)'
-                                        }}
-                                    />
-                                    <Legend
-                                        verticalAlign="top"
-                                        align="center"
-                                        height={80}
-                                        iconType="circle"
-                                        wrapperStyle={{ paddingTop: '10px', paddingBottom: '30px' }}
-                                    />
-                                    <Bar dataKey="totalAllocated" fill="#6366f1" name="Requested Amount" radius={[6, 6, 0, 0]} barSize={35} />
-                                    <Bar dataKey="totalSpent" fill="#10b981" name="Spent Amount" radius={[6, 6, 0, 0]} barSize={35} />
-                                    {/* Custom labels for axes to prevent overlapping */}
-                                    <text
-                                        x={30}
-                                        y={250}
-                                        transform="rotate(-90 30 250)"
-                                        textAnchor="middle"
-                                        fill="#475569"
-                                        fontWeight="600"
-                                        fontSize="14"
-                                    >
-                                        Amount (₹)
-                                    </text>
-                                    <text
-                                        x="50%"
-                                        y={495}
-                                        textAnchor="middle"
-                                        fill="#475569"
-                                        fontWeight="600"
-                                        fontSize="14"
-                                    >
-                                        Departments
-                                    </text>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* High Utilization Alert */}
-                    {dashboard.departmentsWithHighUtilization > 0 && (
-                        <div className="alert alert-warning">
-                            <AlertCircle size={20} />
-                            <div>
-                                <strong>{dashboard.departmentsWithHighUtilization} department(s)</strong> have budget utilization ≥90%.
-                                Consider allocating additional funds if needed.
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Low Utilization Alert */}
-                    {dashboard.departmentsWithLowUtilization > 0 && (
-                        <div className="alert alert-info">
-                            <TrendingDown size={20} />
-                            <div>
-                                <strong>{dashboard.departmentsWithLowUtilization} department(s)</strong> have budget utilization &lt;50%.
-                                Review spending plans and reallocate if necessary.
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Department-wise Utilization Table */}
-                    <div className="report-section">
-                        <h3>Department-wise Utilization Details</h3>
-                        <div className="table-container">
-                            <table className="utilization-table">
-                                <thead>
-                                    <tr>
-                                        <th>Department Code</th>
-                                        <th>Total Allocated</th>
-                                        <th>Total Spent</th>
-                                        <th>Utilization %</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {dashboard.departmentWiseUtilization.map((dept) => (
-                                        <tr key={dept.departmentId}>
-                                            <td>{dept.code}</td>
-                                            <td>₹{dept.totalAllocated.toLocaleString('en-IN')}</td>
-                                            <td>₹{dept.totalSpent.toLocaleString('en-IN')}</td>
-                                            <td>
-                                                <div className="utilization-cell">
-                                                    <div className="utilization-bar">
-                                                        <div
-                                                            className="utilization-fill"
-                                                            style={{
-                                                                width: `${Math.min(dept.utilizationPercentage, 100)}%`,
-                                                                backgroundColor: getStatusColor(dept.utilizationPercentage)
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <span className="percentage">{dept.utilizationPercentage}%</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span className={`status status-${dept.utilizationPercentage >= 90 ? 'critical' :
-                                                    dept.utilizationPercentage >= 75 ? 'warning' :
-                                                        dept.utilizationPercentage >= 50 ? 'moderate' : 'low'
-                                                    }`}>
-                                                    {dept.utilizationPercentage >= 90 ? 'Critical' :
-                                                        dept.utilizationPercentage >= 75 ? 'High' :
-                                                            dept.utilizationPercentage >= 50 ? 'Moderate' : 'Low'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="legend-section">
-                        <h4>Utilization Status Legend</h4>
-                        <div className="legend-items">
-                            <div className="legend-item">
-                                <span className="status status-low" />
-                                <span>Low (0-50%)</span>
-                            </div>
-                            <div className="legend-item">
-                                <span className="status status-moderate" />
-                                <span>Moderate (50-75%)</span>
-                            </div>
-                            <div className="legend-item">
-                                <span className="status status-warning" />
-                                <span>High (75-90%)</span>
-                            </div>
-                            <div className="legend-item">
-                                <span className="status status-critical" />
-                                <span>Critical (≥90%)</span>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};
 
 export const AllocationForm = () => {
     const navigate = useNavigate();
@@ -2791,7 +2557,7 @@ export const AllocationForm = () => {
                                 >
                                     <option value="">Select Budget Head</option>
                                     {budgetHeads.map(head => (
-                                        <option key={head._id} value={head._id}>{head.name} ({head.code})</option>
+                                        <option key={head._id} value={head._id}>{head.name}</option>
                                     ))}
                                 </select>
                                 {isEditMode && <small>Budget head cannot be changed after allocation</small>}

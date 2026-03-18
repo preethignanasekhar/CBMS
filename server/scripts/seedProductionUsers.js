@@ -37,16 +37,20 @@ const departments = [
 
 // Budget heads (predefined) - mapped to existing categories
 const budgetHeads = [
-    { name: 'Lab Equipment', code: 'LAB-EQ', category: 'laboratory_equipment', budgetType: 'recurring' },
-    { name: 'Seminars & Conferences', code: 'SEM', category: 'seminar_conference', budgetType: 'recurring' },
-    { name: 'Workshops', code: 'WS', category: 'seminar_conference', budgetType: 'recurring' },
-    { name: 'Guest Lectures', code: 'GL', category: 'seminar_conference', budgetType: 'recurring' },
-    { name: 'Industrial Visits', code: 'IV', category: 'seminar_conference', budgetType: 'recurring' },
-    { name: 'Maintenance', code: 'MAINT', category: 'maintenance_spares', budgetType: 'recurring' },
-    { name: 'Stationery & Consumables', code: 'STAT', category: 'printing_stationery', budgetType: 'recurring' },
-    { name: 'Library & Books', code: 'LIB', category: 'other', budgetType: 'recurring' },
-    { name: 'Student Activities', code: 'STU', category: 'seminar_conference', budgetType: 'recurring' },
-    { name: 'Miscellaneous', code: 'MISC', category: 'other', budgetType: 'recurring' }
+    { name: 'Software', code: 'SOFT', category: 'infrastructure', budgetType: 'recurring' },
+    { name: 'Laboratory Consumables', code: 'LAB-CONS', category: 'lab_equipment', budgetType: 'recurring' },
+    { name: 'Maintenance and Spares', code: 'MAINT-SP', category: 'maintenance', budgetType: 'recurring' },
+    { name: 'R&D', code: 'RD', category: 'academic', budgetType: 'recurring' },
+    { name: 'Placement & Training Expenses', code: 'PLACE-TRAIN', category: 'academic', budgetType: 'recurring' },
+    { name: 'Faculty Development & Training', code: 'FAC-DEV', category: 'academic', budgetType: 'recurring' },
+    { name: 'Seminar, Conference, Training', code: 'SEM-CONF', category: 'events', budgetType: 'recurring' },
+    { name: 'Association and Co Curricular Expenses', code: 'ASSOC-COCURR', category: 'academic', budgetType: 'recurring' },
+    { name: 'Staff Welfare Expenses', code: 'STAFF-WELF', category: 'operations', budgetType: 'recurring' },
+    { name: 'Printing & Stationery', code: 'PRINT-STAT', category: 'operations', budgetType: 'recurring' },
+    { name: 'Postage Expenses', code: 'POST', category: 'operations', budgetType: 'recurring' },
+    { name: 'Refreshment Expenses', code: 'REFR', category: 'operations', budgetType: 'recurring' },
+    { name: 'Functions', code: 'FUNC', category: 'events', budgetType: 'recurring' },
+    { name: 'Travelling Expenses', code: 'TRAVEL', category: 'operations', budgetType: 'recurring' }
 ];
 
 async function createOrUpdateUser(userData) {

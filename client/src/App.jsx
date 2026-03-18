@@ -16,6 +16,7 @@ import History from './pages/History';
 
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard';
+import InstitutionalDashboard from './pages/InstitutionalDashboard';
 
 
 import {
@@ -24,7 +25,7 @@ import {
   ResubmitExpenditure
 } from './pages/ExpenditureModule';
 import ApprovalsQueue from './pages/ApprovalsQueue';
-import YearComparison from './pages/YearComparison';
+
 import Reports from './pages/Reports';
 import AuditLogs from './pages/AuditLogs';
 import Notifications from './pages/Notifications';
@@ -46,7 +47,6 @@ import {
   BudgetHeadForm,
   BudgetProposals,
   BudgetProposalForm,
-  BudgetUtilizationDashboard,
   AllocationForm
 } from './pages/BudgetModule';
 import {
@@ -63,7 +63,7 @@ const DashboardWrapper = () => {
 
   if (!user) return <Navigate to="/login" />;
 
-  if (user.role === 'department') {
+  if (['department', 'coordinator', 'coordinater'].includes(user.role)) {
     return <DepartmentDashboard />;
   }
 
@@ -72,8 +72,8 @@ const DashboardWrapper = () => {
   }
 
 
-  if (['principal', 'vice_principal'].includes(user.role)) {
-    return <PrincipalDashboard />;
+  if (['principal', 'vice_principal', 'office', 'admin'].includes(user.role)) {
+    return <InstitutionalDashboard />;
   }
 
   return <Dashboard />;
@@ -97,16 +97,15 @@ function App() {
                 <Route path="users" element={<Users />} />
                 <Route path="users/add" element={<Users />} />
                 <Route path="users/edit/:id" element={<Users />} />
-                <Route path="departments" element={<Departments />} />
-                <Route path="departments/add" element={<DepartmentForm />} />
-                <Route path="departments/edit/:id" element={<DepartmentForm />} />
                 <Route path="budget-heads" element={<BudgetHeads />} />
                 <Route path="budget-heads/add" element={<BudgetHeadForm />} />
                 <Route path="budget-heads/edit/:id" element={<BudgetHeadForm />} />
+                <Route path="departments" element={<Departments />} />
+                <Route path="departments/add" element={<DepartmentForm />} />
+                <Route path="departments/edit/:id" element={<DepartmentForm />} />
                 <Route path="categories" element={<Categories />} />
                 <Route path="categories/add" element={<Categories />} />
                 <Route path="categories/edit/:id" element={<Categories />} />
-                <Route path="settings" element={<Settings />} />
 
                 {/* Office Routes */}
                 <Route path="allocations" element={<BudgetAllocations />} />
@@ -117,7 +116,7 @@ function App() {
                 <Route path="budget-proposals/add" element={<BudgetProposalForm />} />
                 <Route path="budget-proposals/edit/:id" element={<BudgetProposalForm />} />
                 <Route path="budget-proposals/:id" element={<BudgetProposalForm />} />
-                <Route path="budget-utilization-dashboard" element={<BudgetUtilizationDashboard />} />
+
                 <Route path="approvals" element={<ApprovalsQueue />} />
                 <Route path="reports" element={<Reports />} />
 
@@ -139,7 +138,8 @@ function App() {
 
                 {/* Management Routes */}
                 <Route path="consolidated-view" element={<ConsolidatedDashboard />} />
-                <Route path="year-comparison" element={<YearComparison />} />
+                <Route path="institutional-insights" element={<InstitutionalDashboard />} />
+
 
                 {/* Auditor Routes */}
                 <Route path="audit-logs" element={<AuditLogs />} />

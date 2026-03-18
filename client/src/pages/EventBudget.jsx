@@ -1,41 +1,27 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import AIRequirementGenerator from '../components/AI/AIRequirementGenerator';
 import PageHeader from '../components/Common/PageHeader';
-import { Sparkles, CalendarCheck, Lightbulb, ArrowRight, CheckCircle2, Wallet } from 'lucide-react';
+import { CalendarCheck, Lightbulb, ArrowRight, CheckCircle2, Wallet, Info } from 'lucide-react';
 import './EventBudget.scss';
 
 const EventBudget = () => {
     const navigate = useNavigate();
-    const [generatedItems, setGeneratedItems] = useState(null);
-
-    const handleRequirementsGenerated = (data) => {
-        setGeneratedItems(data);
-        // Redirect to budget proposal with pre-filled data
-        navigate('/budget-proposals/add', {
-            state: {
-                eventName: data.eventName,
-                selectedItems: data.selectedItems,
-                budgetSuggestions: data.budgetSuggestions
-            }
-        });
-    };
 
     const steps = [
         {
-            icon: <Sparkles size={20} />,
-            title: 'Describe Your Event',
-            desc: 'Enter the event name and a brief description of requirements.'
+            icon: <Info size={20} />,
+            title: 'Prepare Requirements',
+            desc: 'Identify the event requirements and resources needed for your academic event.'
         },
         {
             icon: <CheckCircle2 size={20} />,
-            title: 'Review AI Checklist',
-            desc: 'AI suggests items tailored to your event. Select what you need.'
+            title: 'Review Checklist',
+            desc: 'Ensure all necessary items like honorarium, transport, and refreshment are covered.'
         },
         {
             icon: <Wallet size={20} />,
             title: 'Create Budget Proposal',
-            desc: 'Click "Add to Proposal" to pre-fill the budget form with your selections.'
+            desc: 'Draft the budget proposal with estimated amounts for each requirement.'
         },
         {
             icon: <CalendarCheck size={20} />,
@@ -48,17 +34,35 @@ const EventBudget = () => {
         <div className="event-budget-page">
             <PageHeader
                 title="Event Budget Planner"
-                subtitle="Use AI to plan your event requirements and generate a budget proposal"
+                subtitle="Guidelines and planning for your event budget proposal"
             />
 
             <div className="event-budget-layout">
-                {/* LEFT PANEL — AI Planner */}
+                {/* LEFT PANEL — Planning Info */}
                 <div className="event-budget-left">
                     <div className="panel-label">
-                        <Sparkles size={16} className="sparkle" />
-                        <span>AI Event Planner</span>
+                        <Info size={16} className="info-icon" />
+                        <span>Event Planning Guidelines</span>
                     </div>
-                    <AIRequirementGenerator onRequirementsGenerated={handleRequirementsGenerated} />
+                    <div className="planning-info-container" style={{ padding: '2rem', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Standard Operating Procedure</h3>
+                        <p style={{ color: '#64748b', lineHeight: '1.6' }}>
+                            When planning a departmental event (Seminar, Workshop, FDP, etc.), please ensure:
+                        </p>
+                        <ul style={{ color: '#64748b', paddingLeft: '1.25rem', marginTop: '1rem', lineHeight: '2' }}>
+                            <li>Budget heads are correctly identified.</li>
+                            <li>Resource persons' details are finalized.</li>
+                            <li>Venue and duration are confirmed.</li>
+                            <li>Honorarium and travel allowances are within institution norms.</li>
+                        </ul>
+                        <button 
+                            className="btn btn-primary mt-4" 
+                            onClick={() => navigate('/budget-proposals/add')}
+                            style={{ width: '100%', marginTop: '2rem', padding: '1rem' }}
+                        >
+                            Proceed to Create Proposal <ArrowRight size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* RIGHT PANEL — How it works */}
@@ -69,7 +73,7 @@ const EventBudget = () => {
                             <h3>How It Works</h3>
                         </div>
                         <p className="how-subtitle">
-                            Follow these steps to create an event-specific budget proposal with AI assistance.
+                            Follow these steps to ensure a smooth budget approval process.
                         </p>
 
                         <div className="steps-list">
@@ -92,8 +96,8 @@ const EventBudget = () => {
                             <span>Pro Tip</span>
                         </div>
                         <p>
-                            Be specific in your event description — mentioning the number of attendees, duration,
-                            and required resources helps the AI generate a more accurate checklist.
+                            Submitting your proposal at least 15 days in advance ensures sufficient time for
+                            administrative verification and financial allocation.
                         </p>
                     </div>
 
