@@ -59,12 +59,12 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           ...baseItems,
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
-          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
           { path: '/consolidated-view', label: 'Consolidated', icon: <TrendingUp size={20} /> },
-          { path: '/categories', label: 'Category', icon: <Layers size={20} /> },
+          { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
+          { path: '/expenditures', label: 'Expenditures', icon: <Calculator size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
-
-          historyItem
+          historyItem,
+          { path: '/categories', label: 'Category', icon: <Layers size={20} /> }
         ];
       case 'department':
         return [
@@ -79,6 +79,7 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/hod-analytics', label: 'Analytics', icon: <LineChart size={20} /> },
+          { path: '/budget-proposals', label: 'My Budget Proposals', icon: <FileText size={20} /> },
           { path: '/expenditures', label: 'My Expenditures', icon: <Calculator size={20} /> },
           { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           historyItem
@@ -88,10 +89,10 @@ const Sidebar = ({ isOpen, onClose, isExpanded, onToggleExpand }) => {
         return [
           { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
           { path: '/approvals', label: 'Approvals', icon: <CheckSquare size={20} /> },
-          { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
-          { path: '/consolidated-view', label: 'Consolidated View', icon: <TrendingUp size={20} /> },
-
+          { path: '/consolidated-view', label: 'Consolidated', icon: <TrendingUp size={20} /> },
           { path: '/budget-heads', label: 'Budget Heads', icon: <Wallet size={20} /> },
+          { path: '/expenditures', label: 'Expenditures', icon: <Calculator size={20} /> },
+          { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
           historyItem
         ];
       case 'auditor':

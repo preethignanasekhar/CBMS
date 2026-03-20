@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { allocationAPI } from '../services/api';
+import { X, AlertCircle, CheckCircle, ShieldAlert } from 'lucide-react';
+import IssueEntryModal from '../components/Common/IssueEntryModal';
 import './BulkUpload.scss';
 
 const BulkUpload = () => {
@@ -8,6 +10,7 @@ const BulkUpload = () => {
   const [success, setSuccess] = useState(null);
   const [uploadResults, setUploadResults] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [showIssueModal, setShowIssueModal] = useState(false);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -100,20 +103,36 @@ const BulkUpload = () => {
 
   return (
     <div className="bulk-upload-container">
-      <div className="bulk-upload-header">
-        <h1>Bulk Allocation Upload</h1>
-        <p>Upload multiple budget allocations using a CSV file</p>
+      <div className="bulk-upload-header flex justify-between items-start">
+        <div>
+          <h1>Bulk Allocation Upload</h1>
+          <p>Upload multiple budget allocations using a CSV file</p>
+        </div>
+        <button 
+          className="btn btn-secondary flex items-center gap-2" 
+          onClick={() => setShowIssueModal(true)}
+          style={{ background: 'rgba(255,255,255,0.1)', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
+        >
+          <ShieldAlert size={18} />
+          Report Issue
+        </button>
       </div>
 
       {error && (
         <div className="error-message">
-          {error}
+          <button className="close-popup" onClick={() => setError(null)} title="Close">
+            <X size={14} />
+          </button>
+          <AlertCircle size={18} /> {error}
         </div>
       )}
 
       {success && (
         <div className="success-message">
-          {success}
+          <button className="close-popup" onClick={() => setSuccess(null)} title="Close">
+            <X size={14} />
+          </button>
+          <CheckCircle size={18} /> {success}
         </div>
       )}
 
@@ -277,6 +296,11 @@ const BulkUpload = () => {
           </div>
         </div>
       </div>
+
+      <IssueEntryModal 
+        isOpen={showIssueModal} 
+        onClose={() => setShowIssueModal(false)} 
+      />
     </div>
   );
 };

@@ -19,7 +19,7 @@ import {
     Tag, AlertCircle, Save, AlignLeft, Hash, ArrowLeft, Eye, CheckCircle,
     XCircle, Clock, DollarSign, Send, Check, RefreshCcw, ShieldCheck,
     TrendingUp, TrendingDown, FileText, RotateCw, Download, ArrowUpRight, Search,
-    AlertTriangle, Sparkles, Calendar, RefreshCw
+    AlertTriangle, Sparkles, Calendar, RefreshCw, ChevronLeft, History
 } from 'lucide-react';
 import { getCurrentFinancialYear } from '../utils/dateUtils';
 import {
@@ -122,16 +122,20 @@ export const BudgetAllocations = () => {
     };
 
     const getUtilizationPercentage = (allocated, spent) => {
-        if (allocated === 0) return 0;
-        return Math.round((spent / allocated) * 100);
+        const alloc = Number(allocated) || 0;
+        const used = Number(spent) || 0;
+        if (alloc <= 0) return 0;
+        return Math.round((used / alloc) * 100);
     };
 
     const getUtilizationColor = (percentage) => {
-        if (percentage >= 90) return '#dc3545';
-        if (percentage >= 75) return '#ffc107';
-        if (percentage >= 50) return '#17a2b8';
+        const p = Number(percentage) || 0;
+        if (p >= 90) return '#dc3545';
+        if (p >= 75) return '#ffc107';
+        if (p >= 50) return '#17a2b8';
         return '#28a745';
     };
+
 
     if (loading) {
         return (
@@ -289,10 +293,12 @@ export const BudgetAllocations = () => {
                             <th>Allocated Amount</th>
                             <th>Spent Amount</th>
                             <th>Remaining</th>
+                            <th>Utilization</th>
                         </tr>
                     </thead>
                     <tbody>
                         {allocations.map((allocation) => {
+                            const utilization = getUtilizationPercentage(allocation.allocatedAmount, allocation.spentAmount);
                             return (
                                 <tr key={allocation._id}>
                                     <td>
@@ -309,9 +315,27 @@ export const BudgetAllocations = () => {
                                     <td className="amount">₹{allocation.allocatedAmount?.toLocaleString() || '0'}</td>
                                     <td className="amount">₹{allocation.spentAmount?.toLocaleString() || '0'}</td>
                                     <td className="amount">₹{allocation.remainingAmount?.toLocaleString() || '0'}</td>
+                                    <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <div className="utilization-bar" style={{ flex: '1', minWidth: '80px', marginBottom: '0' }}>
+                                                <div 
+                                                    className="utilization-fill" 
+                                                    style={{ 
+                                                        width: `${Math.min(utilization, 100)}%`,
+                                                        backgroundColor: getUtilizationColor(utilization),
+                                                        height: '100%',
+                                                        borderRadius: '99px'
+                                                    }}
+                                                ></div>
+                                            </div>
+                                            <span style={{ fontWeight: '700', color: 'var(--text-primary)', minWidth: '40px' }}>{utilization}%</span>
+                                        </div>
+                                    </td>
+
                                 </tr>
                             );
                         })}
+
                     </tbody>
                 </table>
             </div>
@@ -640,7 +664,14 @@ export const BudgetHeads = () => {
                 </div>
             </PageHeader>
 
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+                <div className="error-message">
+                    <button className="close-popup" onClick={() => setError(null)} title="Close">
+                        <X size={14} />
+                    </button>
+                    <AlertCircle size={18} /> {error}
+                </div>
+            )}
 
             {stats && (
                 <div className="stats-grid">
@@ -1341,7 +1372,7 @@ export const BudgetProposalForm = () => {
                 // Add validation errors if available
                 if (err.response?.data?.validationErrors && Array.isArray(err.response.data.validationErrors)) {
                     const validationDetails = err.response.data.validationErrors
-                        .map(ve => `${ve.field}: ${ve.message}`)
+                        .map(ve => typeof ve === 'string' ? ve : `${ve.field}: ${ve.message}`)
                         .join('; ');
                     errorMsg += ` | Validation: ${validationDetails}`;
                 }
@@ -1384,32 +1415,35 @@ export const BudgetProposalForm = () => {
     return (
         <div className="budget-proposal-page-container">
             <PageHeader
-                title={isEditMode ? 'Edit Budget Proposal' : 'Create Budget Proposal'}
-                subtitle="Propose budget requirements for your department"
+                title={isEditMode ? ((['submitted', 'verified_by_hod', 'verified_by_principal', 'approved', 'rejected']).includes(formData.status) && user?.role === 'hod' ? 'View Budget Proposal' : 'Edit Budget Proposal') : 'Create Budget Proposal'}
+                subtitle={isEditMode ? "Review and manage your proposal details" : "Propose budget requirements for your department"}
             >
-                <button
-                    type="button"
-                    className="btn btn-info"
-                    onClick={refreshAllStats}
-                    disabled={refreshing || !formData.proposalItems.some(item => item.budgetHead)}
-                    title="Refresh current year expenditure amounts"
-                    style={{ marginRight: '8px' }}
-                >
-                    <RotateCw size={18} style={{ marginRight: '6px' }} />
-                    {refreshing ? 'Refreshing...' : 'Refresh Amounts'}
-                </button>
-                {lastRefreshed && (
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '12px' }}>
-                        Last refreshed: {lastRefreshed.toLocaleTimeString()}
-                    </span>
-                )}
-                <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => navigate('/budget-proposals')}
-                >
-                    <ArrowLeft size={18} /> Cancel
-                </button>
+                <div className="header-actions">
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => navigate('/budget-proposals')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '8px' }}
+                    >
+                        <ChevronLeft size={18} /> Back to My Proposals
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-info"
+                        onClick={refreshAllStats}
+                        disabled={refreshing || !formData.proposalItems.some(item => item.budgetHead)}
+                        title="Refresh current year expenditure amounts"
+                        style={{ marginRight: '8px' }}
+                    >
+                        <RotateCw size={18} style={{ marginRight: '6px' }} />
+                        {refreshing ? 'Refreshing...' : 'Refresh Amounts'}
+                    </button>
+                    {lastRefreshed && (
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '12px' }}>
+                            Last refreshed: {lastRefreshed.toLocaleTimeString()}
+                        </span>
+                    )}
+                </div>
             </PageHeader>
 
             {error && (
@@ -1433,16 +1467,39 @@ export const BudgetProposalForm = () => {
                 <div className="warning-message" style={{
                     backgroundColor: '#fff3cd',
                     color: '#856404',
-                    padding: '0.6rem 1rem',
-                    borderRadius: '8px',
+                    padding: '0.75rem 2.5rem 0.75rem 1rem',
+                    borderRadius: '12px',
                     marginBottom: '1.25rem',
                     border: '1px solid #ffeeba',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '0.9rem'
+                    gap: '12px',
+                    fontSize: '0.9rem',
+                    position: 'relative',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                 }}>
-                    <AlertTriangle size={24} />
+                    <button 
+                        style={{
+                            position: 'absolute',
+                            top: '50%',
+                            right: '10px',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#856404',
+                            opacity: 0.7,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                        onClick={(e) => {
+                            e.target.closest('.warning-message').style.display = 'none';
+                        }}
+                    >
+                        <X size={16} />
+                    </button>
+                    <AlertTriangle size={24} style={{ flexShrink: 0 }} />
                     <div>
                         <strong>Warning:</strong> This proposal has already been approved.
                         Editing and saving it will revert its status to <strong>Revised</strong> and require a new round of approvals.
@@ -1658,7 +1715,7 @@ export const BudgetProposalForm = () => {
                                 className="btn btn-secondary"
                                 onClick={() => navigate('/budget-proposals')}
                             >
-                                Cancel
+                                Back
                             </button>
                             <button
                                 type="button"
@@ -2030,8 +2087,8 @@ export const BudgetProposals = () => {
     return (
         <div className="budget-proposals-container">
             <PageHeader
-                title={['admin', 'office', 'principal', 'vice_principal', 'auditor'].includes(user?.role) ? 'Budget Proposals Approvals' : 'Budget Proposals Management'}
-                subtitle={['admin', 'office', 'principal', 'vice_principal', 'auditor'].includes(user?.role) ? 'Review and approve budget proposals' : 'Create and manage budget proposals for your department'}
+                title={['admin', 'office', 'principal', 'vice_principal', 'auditor'].includes(user?.role) ? 'Budget Proposals Approvals' : 'My Budget Proposals'}
+                subtitle={['admin', 'office', 'principal', 'vice_principal', 'auditor'].includes(user?.role) ? 'Review and approve budget proposals' : 'Track and manage your department\'s budget planning'}
             >
                 {['admin', 'office', 'principal', 'vice_principal', 'auditor'].includes(user?.role) ? null : (
                     <Link to="/budget-proposals/add" className="btn btn-primary">
@@ -2040,7 +2097,14 @@ export const BudgetProposals = () => {
                 )}
             </PageHeader>
 
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+                <div className="error-message">
+                    <button className="close-popup" onClick={() => setError(null)} title="Close">
+                        <X size={14} />
+                    </button>
+                    <AlertCircle size={18} /> {error}
+                </div>
+            )}
 
             {stats && (
                 <div className="stats-grid">

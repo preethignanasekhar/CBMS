@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { reportAPI, departmentsAPI, budgetHeadsAPI, usersAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Receipt, IndianRupee, PieChart, Download, FileText, Calendar, AlertCircle, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Receipt, IndianRupee, PieChart, Download, FileText, Calendar, AlertCircle, X, RotateCw } from 'lucide-react';
+import XLSX from 'xlsx-js-style';
 import PageHeader from '../components/Common/PageHeader';
 import './Reports.scss';
 
@@ -43,11 +43,12 @@ const Reports = () => {
   const fetchMasterData = async () => {
     try {
       const [departmentsRes, budgetHeadsRes, usersRes, yearsRes] = await Promise.all([
-        departmentsAPI.getDepartments(),
-        budgetHeadsAPI.getBudgetHeads(),
+        departmentsAPI.getDepartments({ limit: 1000 }),
+        budgetHeadsAPI.getBudgetHeads({ limit: 1000 }),
         usersAPI.getUsers({ limit: 1000 }),
         financialYearAPI.getFinancialYears()
       ]);
+
 
       setDepartments(departmentsRes.data.data.departments);
       setBudgetHeads(budgetHeadsRes.data.data.budgetHeads);
@@ -117,8 +118,8 @@ const Reports = () => {
       }
 
       setReportData(response.data.data);
-      // Always download as CSV
-      downloadAsCSV(response.data.data);
+      // Always download as Excel
+      downloadAsExcel(response.data.data);
     } catch (err) {
       const serverMsg = err?.response?.data?.message || err?.message || 'Failed to generate report';
       setError(serverMsg);
@@ -128,91 +129,140 @@ const Reports = () => {
     }
   };
 
-  const downloadAsCSV = (data) => {
+  const downloadAsExcel = (data) => {
     let rows = [];
+    let headers = [];
 
     if (reportType === 'expenditures' && data?.expenditures) {
+      headers = [
+        'Event Name', 'Event Type', 'Event Date', 'Total Amount', 'Bill Number',
+        'Bill Date', 'Vendor', 'Department', 'Budget Head', 'Status',
+        'Financial Year', 'Submitted By', 'Created At'
+      ];
       data.expenditures.forEach(exp => {
         const items = exp.expenseItems && exp.expenseItems.length > 0
           ? exp.expenseItems
           : [{ billNumber: exp.billNumber || 'N/A', billDate: exp.billDate, amount: exp.billAmount || exp.totalAmount || 0, vendorName: exp.partyName || 'N/A' }];
         items.forEach(item => {
-          rows.push({
-            'Event Name': exp.eventName,
-            'Event Type': exp.eventType,
-            'Event Date': formatDate(exp.eventDate),
-            'Total Amount': item.amount,
-            'Bill Number': item.billNumber,
-            'Bill Date': item.billDate ? formatDate(item.billDate) : 'N/A',
-            'Vendor': item.vendorName || 'N/A',
-            'Department': exp.department?.name || 'N/A',
-            'Budget Head': (item.budgetHead?.name || exp.budgetHead?.name) || 'N/A',
-            'Status': exp.status,
-            'Financial Year': exp.financialYear,
-            'Submitted By': exp.submittedBy?.name || 'N/A',
-            'Created At': exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
-          });
+          rows.push([
+            exp.eventName || 'N/A',
+            exp.eventType || 'N/A',
+            formatDate(exp.eventDate),
+            item.amount,
+            item.billNumber || 'N/A',
+            item.billDate ? formatDate(item.billDate) : 'N/A',
+            item.vendorName || 'N/A',
+            exp.department?.name || 'N/A',
+            (item.budgetHead?.name || exp.budgetHead?.name) || 'N/A',
+            exp.status,
+            exp.financialYear,
+            exp.submittedBy?.name || 'N/A',
+            exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
+          ]);
         });
       });
     } else if (reportType === 'allocations' && data?.allocations) {
-      rows = data.allocations.map(alloc => ({
-        'Financial Year': alloc.financialYear,
-        'Department': alloc.department?.name || 'N/A',
-        'Budget Head': alloc.budgetHead?.name || 'N/A',
-        'Allocated Amount': alloc.allocatedAmount,
-        'Spent Amount': alloc.spentAmount,
-        'Remaining Amount': alloc.remainingAmount,
-        'Utilization %': alloc.allocatedAmount > 0 ? Math.round((alloc.spentAmount / alloc.allocatedAmount) * 100) : 0,
-      }));
+      headers = [
+        'Financial Year', 'Department', 'Budget Head', 'Allocated Amount',
+        'Spent Amount', 'Remaining Amount', 'Utilization %',
+        'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'JAN', 'FEB', 'MAR'
+      ];
+      rows = data.allocations.map(alloc => {
+        const bd = alloc.monthlyBreakdown || {};
+        return [
+          alloc.financialYear,
+          alloc.department?.name || 'N/A',
+          alloc.budgetHead?.name || 'N/A',
+          alloc.allocatedAmount,
+          alloc.spentAmount,
+          alloc.remainingAmount,
+          alloc.allocatedAmount > 0 ? Math.round((alloc.spentAmount / alloc.allocatedAmount) * 100) : 0,
+          bd.apr || 0, bd.may || 0, bd.jun || 0, bd.jul || 0, bd.aug || 0, bd.sep || 0,
+          bd.oct || 0, bd.nov || 0, bd.dec || 0, bd.jan || 0, bd.feb || 0, bd.mar || 0
+        ];
+      });
     } else if (reportType === 'dashboard') {
+      headers = ['Metric', 'Value'];
       const consolidated = data?.consolidated || data;
       rows = [
-        { Metric: 'Total Allocated', Value: consolidated.totalAllocated },
-        { Metric: 'Total Spent', Value: consolidated.totalSpent },
-        { Metric: 'Total Remaining', Value: consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent) },
-        { Metric: 'Utilization %', Value: consolidated.utilizationPercentage },
+        ['Total Allocated', consolidated.totalAllocated],
+        ['Total Spent', consolidated.totalSpent],
+        ['Total Remaining', consolidated.totalRemaining || (consolidated.totalAllocated - consolidated.totalSpent)],
+        ['Utilization %', consolidated.utilizationPercentage],
       ];
       if (consolidated.departmentBreakdown) {
-        rows.push({ Metric: '' });
-        rows.push({ Metric: '--- Department Breakdown ---' });
+        rows.push(['']);
+        rows.push(['--- Department Breakdown ---']);
+        rows.push([
+          'Department', 'Allocated', 'Spent', 'Remaining', 'Utilization %',
+          'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'JAN', 'FEB', 'MAR'
+        ]);
         Object.entries(consolidated.departmentBreakdown).forEach(([dept, d]) => {
-          rows.push({ Metric: dept, Allocated: d.allocated, Spent: d.spent, Remaining: d.remaining, 'Utilization %': d.utilization });
+          const m = d.monthlyBreakdown || {};
+          rows.push([
+            dept, d.allocated, d.spent, d.remaining, d.utilization,
+            m.apr || 0, m.may || 0, m.jun || 0, m.jul || 0, m.aug || 0, m.sep || 0,
+            m.oct || 0, m.nov || 0, m.dec || 0, m.jan || 0, m.feb || 0, m.mar || 0
+          ]);
         });
       }
+
     } else if (reportType === 'audit' && data?.auditLogs) {
-      rows = data.auditLogs.map(log => ({
-        'Timestamp': new Date(log.createdAt).toLocaleString(),
-        'Event Type': log.eventType,
-        'Actor': log.actor?.name || 'System',
-        'Role': log.actor?.role || 'N/A',
-        'Entity': log.targetEntity,
-        'ID': log.targetId,
-      }));
+      headers = ['Timestamp', 'Event Type', 'Actor', 'Role', 'Entity', 'ID'];
+      rows = data.auditLogs.map(log => [
+        new Date(log.createdAt).toLocaleString(),
+        log.eventType,
+        log.actor?.name || 'System',
+        log.actor?.role || 'N/A',
+        log.targetEntity || 'N/A',
+        log.targetId || 'N/A'
+      ]);
     }
 
-    if (rows.length === 0) {
+    if (rows.length === 0 && headers.length === 0) {
       setError('No data available to export for the selected filters.');
       return;
     }
 
     try {
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const csvOutput = XLSX.utils.sheet_to_csv(ws);
-      const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${reportType}-report-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 200);
+      // Create a workbook and a worksheet
+      const wb = XLSX.utils.book_new();
+      
+      // Combine headers and rows
+      const wsData = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Apply styling to headers (Row 1)
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      const headerStyle = {
+        font: { bold: true, color: { rgb: "000000" } },
+        fill: { fgColor: { rgb: "E7E9EB" } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (!ws[cellAddress]) continue;
+        ws[cellAddress].s = headerStyle;
+      }
+
+      // Set column widths
+      ws['!cols'] = headers.map(() => ({ wch: 18 }));
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+      
+      // Write to file
+      XLSX.writeFile(wb, `${reportType}-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      
     } catch (err) {
-      console.error('CSV export error:', err);
-      setError('Failed to generate CSV file. Please try again.');
+      console.error('Excel export error:', err);
+      setError('Failed to generate Excel file. Please try again.');
     }
   };
 
@@ -684,7 +734,7 @@ const Reports = () => {
             ) : (
               <>
                 <FileText size={16} />
-                Generate & Download CSV
+                Generate & Download Excel
               </>
             )}
           </button>

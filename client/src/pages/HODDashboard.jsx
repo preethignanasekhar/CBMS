@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import ReactECharts from 'echarts-for-react';
 import { useNavigate } from 'react-router-dom';
 import { expenditureAPI, budgetProposalAPI, allocationAPI, reportAPI, financialYearAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -37,7 +38,8 @@ const HODDashboard = () => {
       totalAllocated: 0,
       totalUtilized: 0,
       totalRemaining: 0
-    }
+    },
+    budgetHeadBreakdown: {}
   });
 
   const calculateMonthlyTotals = (items) => {
@@ -110,15 +112,20 @@ const HODDashboard = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    await Promise.all([
-      fetchExpenditures(),
-      fetchProposals(),
-      fetchDashboardStats()
-    ]);
-    setLoading(false);
-  };
+    try {
+      await Promise.all([
+        fetchExpenditures(),
+        fetchProposals(),
+        fetchDashboardStats()
+      ]);
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, targetYear, user.department]);
 
   const fetchDashboardStats = async () => {
     try {
@@ -138,7 +145,8 @@ const HODDashboard = () => {
         totalAllocated: data.totalAllocated || 0,
         totalUtilized: data.totalUtilized || 0,
         totalRemaining: Math.max(0, (data.totalAllocated || 0) - (data.totalUtilized || 0))
-      }
+      },
+      budgetHeadBreakdown: data.budgetHeadBreakdown || {}
     });
   };
 
@@ -333,6 +341,110 @@ const HODDashboard = () => {
     });
   };
 
+  const chartOption = useMemo(() => {
+    if (!dashboardData || !dashboardData.budgetHeadBreakdown || Object.keys(dashboardData.budgetHeadBreakdown).length === 0) {
+      return null;
+    }
+
+    const data = Object.entries(dashboardData.budgetHeadBreakdown).map(([name, head]) => ({
+      name,
+      value: head.allocated
+    })).filter(item => item.value > 0);
+
+    if (data.length === 0) return null;
+
+    return {
+      title: {
+        text: 'Budget Distribution',
+        subtext: 'Allocation by Budget Head',
+        left: 'center',
+        top: '20px',
+        textStyle: {
+          fontSize: 24,
+          fontWeight: '700',
+          color: '#1e293b'
+        },
+        subtextStyle: {
+          fontSize: 14,
+          color: '#64748b'
+        }
+      },
+      color: [
+        '#2563eb', // Blue-600
+        '#3b82f6', // Blue-500
+        '#60a5fa', // Blue-400
+        '#0ea5e9', // Sky-500
+        '#38bdf8', // Sky-400
+        '#4f46e5', // Indigo-600
+        '#6366f1', // Indigo-500
+        '#818cf8', // Indigo-400
+        '#7c3aed', // Violet-600
+        '#8b5cf6', // Violet-500
+        '#a78bfa', // Lavender/Violet-400
+        '#c4b5fd', // Light Lavender
+        '#ddd6fe', // Extra Light Lavender
+        '#9333ea', // Purple-600
+        '#a855f7', // Purple-500
+        '#c084fc', // Purple-400
+        '#e9d5ff', // Purple-200
+        '#1e40af', // Deep Blue-800
+        '#3730a3', // Deep Indigo-800
+        '#4c1d95'  // Deep Violet-900
+      ],
+      tooltip: {
+        trigger: 'item',
+        formatter: (params) => {
+          return `${params.name}<br/>Allocated: ${formatCurrency(params.value)} (${params.percent}%)`;
+        },
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        textStyle: { color: '#1e293b' }
+      },
+      legend: { 
+        orient: 'vertical', 
+        left: '5%',
+        top: 'middle',
+        itemGap: 15,
+        textStyle: { 
+          fontSize: 12,
+          color: '#475569',
+          fontWeight: '500'
+        }
+      },
+      series: [{
+        name: 'Budget Distribution',
+        type: 'pie',
+        radius: ['40%', '75%'],
+        center: ['65%', '55%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 3
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: '18',
+            fontWeight: 'bold',
+            formatter: '{d}%'
+          },
+          itemStyle: {
+            shadowBlur: 15,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.15)'
+          }
+        },
+        data: data
+      }]
+    };
+  }, [dashboardData.budgetHeadBreakdown]);
+
   if (loading) {
     return (
       <div className="hod-dashboard-container">
@@ -411,6 +523,24 @@ const HODDashboard = () => {
           {error}
         </div>
       )}
+
+      {/* Budget Distribution Chart */}
+      <div className="card-standard mb-5 p-0 overflow-hidden" style={{ minHeight: '450px' }}>
+        {chartOption ? (
+          <div className="chart-container" style={{ height: '450px', padding: '1rem' }}>
+            <ReactECharts 
+              option={chartOption} 
+              style={{ height: '100%', width: '100%' }} 
+              opts={{ renderer: 'svg' }}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-10 text-gray-400">
+            <PieChart size={48} className="mb-2 opacity-20" />
+            <p>No budget distribution data available for this year</p>
+          </div>
+        )}
+      </div>
 
       <div className="approvals-section">
         <div className="section-header">

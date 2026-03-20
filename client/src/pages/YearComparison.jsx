@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { allocationAPI, financialYearAPI } from '../services/api';
 import { Download, FileSpreadsheet, FileText, AlertCircle, Calendar, Search, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import PageHeader from '../components/Common/PageHeader';
@@ -186,52 +186,84 @@ const YearComparison = () => {
 
     const wb = XLSX.utils.book_new();
 
+    const headerStyle = {
+      font: { bold: true },
+      alignment: { horizontal: 'center' },
+      fill: { fgColor: { rgb: "E7E9EB" } }
+    };
+
     // ── Sheet 1: Summary ──────────────────────────────────────────────
     if (comparisonData.overallComparison) {
       const oc = comparisonData.overallComparison;
       const summaryData = [
-        { Metric: 'Comparison Period', [`${filters.currentYear}`]: filters.currentYear, [`${filters.previousYear}`]: filters.previousYear },
-        { Metric: 'Total Allocation', [`${filters.currentYear}`]: oc.allocationChange.current, [`${filters.previousYear}`]: oc.allocationChange.previous },
-        { Metric: 'Allocation Change', [`${filters.currentYear}`]: `${oc.allocationChange.changePercentage}%`, [`${filters.previousYear}`]: '' },
-        { Metric: 'Total Spending', [`${filters.currentYear}`]: oc.spendingChange.current, [`${filters.previousYear}`]: oc.spendingChange.previous },
-        { Metric: 'Spending Change', [`${filters.currentYear}`]: `${oc.spendingChange.changePercentage}%`, [`${filters.previousYear}`]: '' },
-        { Metric: 'Budget Utilization %', [`${filters.currentYear}`]: `${oc.utilizationChange.current}%`, [`${filters.previousYear}`]: `${oc.utilizationChange.previous}%` },
+        ['Metric', filters.currentYear, filters.previousYear],
+        ['Total Allocation', oc.allocationChange.current, oc.allocationChange.previous],
+        ['Allocation Change', `${oc.allocationChange.changePercentage}%`, ''],
+        ['Total Spending', oc.spendingChange.current, oc.spendingChange.previous],
+        ['Spending Change', `${oc.spendingChange.changePercentage}%`, ''],
+        ['Budget Utilization %', `${oc.utilizationChange.current}%`, `${oc.utilizationChange.previous}%`],
       ];
-      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      
+      // Style header
+      for (let c = 0; c < 3; c++) {
+        const cell = wsSummary[XLSX.utils.encode_cell({ r: 0, c })];
+        if (cell) cell.s = headerStyle;
+      }
+      wsSummary['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }];
+      
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
     }
 
     // ── Sheet 2: Department Comparison ────────────────────────────────
     if (deptData.length > 0) {
-      const deptExport = deptData.map(dept => ({
-        'Department': dept.departmentName,
-        [`Alloc ${filters.currentYear}`]: dept.allocationChange.current,
-        [`Alloc ${filters.previousYear}`]: dept.allocationChange.previous,
-        'Alloc Change %': dept.allocationChange.changePercentage,
-        [`Spent ${filters.currentYear}`]: dept.spendingChange.current,
-        [`Spent ${filters.previousYear}`]: dept.spendingChange.previous,
-        'Spending Change %': dept.spendingChange.changePercentage,
-        [`Util ${filters.currentYear} %`]: dept.utilizationChange.current,
-        [`Util ${filters.previousYear} %`]: dept.utilizationChange.previous,
-      }));
-      const wsDept = XLSX.utils.json_to_sheet(deptExport);
+      const headers = ['Department', `Alloc ${filters.currentYear}`, `Alloc ${filters.previousYear}`, 'Alloc Change %', `Spent ${filters.currentYear}`, `Spent ${filters.previousYear}`, 'Spending Change %', `Util ${filters.currentYear} %`, `Util ${filters.previousYear} %` ];
+      const rows = deptData.map(dept => [
+        dept.departmentName,
+        dept.allocationChange.current,
+        dept.allocationChange.previous,
+        dept.allocationChange.changePercentage,
+        dept.spendingChange.current,
+        dept.spendingChange.previous,
+        dept.spendingChange.changePercentage,
+        dept.utilizationChange.current,
+        dept.utilizationChange.previous,
+      ]);
+      const wsDept = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      
+      // Style header
+      for (let c = 0; c < headers.length; c++) {
+        const cell = wsDept[XLSX.utils.encode_cell({ r: 0, c })];
+        if (cell) cell.s = headerStyle;
+      }
+      wsDept['!cols'] = headers.map(() => ({ wch: 18 }));
+      
       XLSX.utils.book_append_sheet(wb, wsDept, 'Department Comparison');
     }
 
     // ── Sheet 3: Budget Head Comparison ───────────────────────────────
     if (headData.length > 0) {
-      const headExport = headData.map(head => ({
-        'Budget Head': head.budgetHeadName,
-        [`Alloc ${filters.currentYear}`]: head.allocationChange.current,
-        [`Alloc ${filters.previousYear}`]: head.allocationChange.previous,
-        'Alloc Change %': head.allocationChange.changePercentage,
-        [`Spent ${filters.currentYear}`]: head.spendingChange.current,
-        [`Spent ${filters.previousYear}`]: head.spendingChange.previous,
-        'Spending Change %': head.spendingChange.changePercentage,
-        [`Util ${filters.currentYear} %`]: head.utilizationChange.current,
-        [`Util ${filters.previousYear} %`]: head.utilizationChange.previous,
-      }));
-      const wsHead = XLSX.utils.json_to_sheet(headExport);
+      const headers = ['Budget Head', `Alloc ${filters.currentYear}`, `Alloc ${filters.previousYear}`, 'Alloc Change %', `Spent ${filters.currentYear}`, `Spent ${filters.previousYear}`, 'Spending Change %', `Util ${filters.currentYear} %`, `Util ${filters.previousYear} %` ];
+      const rows = headData.map(head => [
+        head.budgetHeadName,
+        head.allocationChange.current,
+        head.allocationChange.previous,
+        head.allocationChange.changePercentage,
+        head.spendingChange.current,
+        head.spendingChange.previous,
+        head.spendingChange.changePercentage,
+        head.utilizationChange.current,
+        head.utilizationChange.previous,
+      ]);
+      const wsHead = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      
+      // Style header
+      for (let c = 0; c < headers.length; c++) {
+        const cell = wsHead[XLSX.utils.encode_cell({ r: 0, c })];
+        if (cell) cell.s = headerStyle;
+      }
+      wsHead['!cols'] = headers.map(() => ({ wch: 20 }));
+      
       XLSX.utils.book_append_sheet(wb, wsHead, 'Budget Head Comparison');
     }
 
@@ -681,6 +713,9 @@ const YearComparison = () => {
         <div className="export-actions">
           <button className="btn btn-outline" onClick={handleExportCSV} title="Export CSV">
             <FileText size={18} />
+          </button>
+          <button className="btn btn-outline" onClick={handleExcelExport} title="Export Excel">
+            <FileSpreadsheet size={18} />
           </button>
         </div>
       </div>

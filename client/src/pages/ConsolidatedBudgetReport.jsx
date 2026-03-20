@@ -4,6 +4,7 @@ import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Download, RotateCw } from 'lucide-react';
+import XLSX from 'xlsx-js-style';
 import './ConsolidatedBudgetReport.scss';
 
 const ConsolidatedBudgetReport = () => {
@@ -62,42 +63,87 @@ const ConsolidatedBudgetReport = () => {
     fetchReport();
   };
 
-  const exportToCSV = () => {
+  const exportToExcel = () => {
     if (!report) return;
 
-    let csv = 'Consolidated Budget Report\n';
-    csv += `Financial Year: ${filters.financialYear}\n`;
-    csv += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
+    const wb = XLSX.utils.book_new();
+    const rows = [];
+    const headerStyle = {
+        font: { bold: true },
+        alignment: { horizontal: 'center' },
+        fill: { fgColor: { rgb: "E7E9EB" } }
+    };
+    
+    // Header Info
+    rows.push(['Consolidated Budget Report']);
+    rows.push([`Financial Year: ${filters.financialYear}`]);
+    rows.push([`Generated on: ${new Date().toLocaleDateString()}`]);
+    rows.push(['']);
 
-    // Summary
-    csv += 'SUMMARY\n';
-    csv += 'Grand Total Allocated,Grand Total Spent,Grand Total Unspent,Utilization %\n';
-    csv += `${report.summary.grandTotalAllocated},${report.summary.grandTotalSpent},${report.summary.grandTotalUnspent},${report.summary.grandUtilizationPercentage}%\n\n`;
+    // Summary Section
+    rows.push(['SUMMARY']);
+    rows.push(['Grand Total Allocated', 'Grand Total Spent', 'Grand Total Unspent', 'Utilization %']);
+    rows.push([
+      report.summary.grandTotalAllocated,
+      report.summary.grandTotalSpent,
+      report.summary.grandTotalUnspent,
+      `${report.summary.grandUtilizationPercentage}%`
+    ]);
+    rows.push(['']);
 
-    // By Department
-    csv += 'DEPARTMENT WISE BREAKDOWN\n';
-    csv += 'Department,Total Allocated,Total Spent,Total Unspent,Utilization %\n';
+    // Department Breakdown
+    rows.push(['DEPARTMENT WISE BREAKDOWN']);
+    rows.push(['Department', 'Total Allocated', 'Total Spent', 'Total Unspent', 'Utilization %']);
     report.byDepartment.forEach(dept => {
-      csv += `"${dept.departmentName}",${dept.totalAllocated},${dept.totalSpent},${dept.totalUnspent},${dept.utilizationPercentage}%\n`;
+      rows.push([
+        dept.departmentName,
+        dept.totalAllocated,
+        dept.totalSpent,
+        dept.totalUnspent,
+        `${dept.utilizationPercentage}%`
+      ]);
     });
-    csv += '\n';
+    rows.push(['']);
 
-    // By Category
-    csv += 'CATEGORY WISE BREAKDOWN\n';
-    csv += 'Category,Allocated,Spent,Utilization %\n';
+    // Category Breakdown
+    rows.push(['CATEGORY WISE BREAKDOWN']);
+    rows.push(['Category', 'Allocated', 'Spent', 'Utilization %']);
     Object.keys(report.byCategory).forEach(cat => {
       const data = report.byCategory[cat];
-      csv += `"${cat}",${data.allocated},${data.spent},${data.percentage}%\n`;
+      rows.push([
+        cat.replace(/_/g, ' ').toUpperCase(),
+        data.allocated,
+        data.spent,
+        `${data.percentage}%`
+      ]);
     });
 
-    // Create download link
-    const element = document.createElement('a');
-    element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv));
-    element.setAttribute('download', `consolidated-budget-report-${filters.financialYear}.csv`);
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    // Find all rows that look like headers (uppercase or specific text)
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const firstCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
+      if (firstCell && (
+        ['SUMMARY', 'DEPARTMENT WISE BREAKDOWN', 'CATEGORY WISE BREAKDOWN', 'Consolidated Budget Report'].includes(firstCell.v) ||
+        (r > 0 && ws[XLSX.utils.encode_cell({ r: r-1, c: 0 })]?.v?.toString().includes('BREAKDOWN')) ||
+        (r === 6) // Hardcoded for the summary header row
+      )) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (cell) {
+              cell.s = headerStyle;
+          }
+        }
+      }
+    }
+
+    ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 15 }];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Consolidated Report');
+    XLSX.writeFile(wb, `consolidated-budget-report-${filters.financialYear}.xlsx`);
   };
 
   if (loading && !report) {
@@ -118,8 +164,8 @@ const ConsolidatedBudgetReport = () => {
           <button className="btn btn-secondary" onClick={handleRefresh}>
             <RotateCw size={18} /> Refresh
           </button>
-          <button className="btn btn-primary" onClick={exportToCSV}>
-            <Download size={18} /> Export CSV
+          <button className="btn btn-primary" onClick={exportToExcel}>
+            <Download size={18} /> Export Excel
           </button>
         </div>
       </PageHeader>

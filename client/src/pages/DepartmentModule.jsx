@@ -41,6 +41,7 @@ import {
     UserX,
     Search
 } from 'lucide-react';
+import XLSX from 'xlsx-js-style';
 import PageHeader from '../components/Common/PageHeader';
 import StatCard from '../components/Common/StatCard';
 import Tooltip from '../components/Tooltip/Tooltip';
@@ -167,17 +168,64 @@ export const DepartmentDashboard = () => {
             setRefreshing(true);
             const response = await reportAPI.getExpenditureReport({
                 department: user.department?._id || user.department,
-                format: 'csv'
+                format: 'json'
             });
 
-            // Create blob and download
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `Expenditure_Report_${user.department?.name || 'Department'}_${new Date().toLocaleDateString()}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            const data = response.data.data;
+            const expenditures = data.expenditures || [];
+
+            const wb = XLSX.utils.book_new();
+            const headers = [
+                'Event Name', 'Event Type', 'Event Date', 'Total Amount', 'Bill Number',
+                'Bill Date', 'Vendor', 'Department', 'Budget Head', 'Status',
+                'Financial Year', 'Submitted By', 'Created At'
+            ];
+
+            const rows = [];
+            expenditures.forEach(exp => {
+                const items = exp.expenseItems && exp.expenseItems.length > 0
+                    ? exp.expenseItems
+                    : [{ billNumber: exp.billNumber || 'N/A', billDate: exp.billDate, amount: exp.billAmount || exp.totalAmount || 0, vendorName: exp.partyName || 'N/A' }];
+                
+                items.forEach(item => {
+                    rows.push([
+                        exp.eventName || 'N/A',
+                        exp.eventType || 'N/A',
+                        exp.eventDate ? new Date(exp.eventDate).toLocaleDateString() : 'N/A',
+                        item.amount,
+                        item.billNumber || 'N/A',
+                        item.billDate ? new Date(item.billDate).toLocaleDateString() : 'N/A',
+                        item.vendorName || 'N/A',
+                        exp.department?.name || 'N/A',
+                        (item.budgetHead?.name || exp.budgetHead?.name) || 'N/A',
+                        exp.status,
+                        exp.financialYear,
+                        exp.submittedBy?.name || 'N/A',
+                        exp.createdAt ? new Date(exp.createdAt).toISOString() : 'N/A'
+                    ]);
+                });
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+            // Apply styles to headers
+            const headerStyle = {
+                font: { bold: true },
+                alignment: { horizontal: 'center' },
+                fill: { fgColor: { rgb: "E7E9EB" } }
+            };
+
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let c = range.s.c; c <= range.e.c; c++) {
+                const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+                if (cell) cell.s = headerStyle;
+            }
+
+            ws['!cols'] = headers.map(() => ({ wch: 20 }));
+
+            XLSX.utils.book_append_sheet(wb, ws, 'Expenditure Report');
+            XLSX.writeFile(wb, `Expenditure_Report_${user.department?.name || 'Department'}_${new Date().toLocaleDateString()}.xlsx`);
+
         } catch (err) {
             console.error('Error downloading report:', err);
             setError('Failed to download report. Please try again.');
